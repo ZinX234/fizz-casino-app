@@ -1,0 +1,42 @@
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import { ArrowDownLeft, ArrowUpRight, BadgeCheck, Clock3, CreditCard, ShieldCheck, Wallet } from 'lucide-react'
+import { AccountNavigation, CasinoHeaderForAccount, CasinoPageHeader, EmptyDataState, formatMoney } from '@/components/casino-home'
+import { auth } from '@/lib/auth/server'
+import { getAccountSnapshot } from '@/lib/casino-data'
+
+export const dynamic = 'force-dynamic'
+export const metadata = { title: 'My account | Fizz Casino' }
+
+export default async function AccountPage() {
+  const { data: session } = await auth.getSession()
+  if (!session?.user) redirect('/auth/sign-in')
+
+  let account: Awaited<ReturnType<typeof getAccountSnapshot>> | null = null
+  try {
+    account = await getAccountSnapshot(session.user.id)
+  } catch (error) {
+    console.error('[v0] Account data load failed:', error instanceof Error ? error.message : 'unknown error')
+  }
+
+  return <div className="min-h-screen bg-[#0b0c10] text-white"><CasinoHeaderForAccount /><main className="mx-auto max-w-7xl px-5 py-9 sm:px-8 sm:py-14"><CasinoPageHeader eyebrow="Your Fizz account" title="Account overview" detail="Your real wallet, account activity, bonuses and responsible gaming settings." /><AccountNavigation active="overview" />
+    {!account ? <div role="alert" className="rounded-2xl border border-rose-200/10 bg-rose-100/[0.035] p-5 text-sm text-rose-100/75">Your account data could not be loaded. No balance or activity has been substituted.</div> : <>
+      <section aria-label="Account summary" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#12141a] p-5"><div className="flex items-center gap-2 text-xs font-semibold text-white/45"><Wallet aria-hidden="true" className="size-4 text-amber-100/70" /> Wallet balance</div><p className="mt-4 text-2xl font-bold tracking-tight text-white">{formatMoney(account.wallet.balance, account.wallet.currency)}</p><Link href="#wallet" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-amber-100/70 hover:text-amber-100">Wallet activity <ArrowDownLeft aria-hidden="true" className="size-3.5" /></Link></div>
+        <div className="rounded-2xl border border-white/[0.08] bg-[#12141a] p-5"><div className="flex items-center gap-2 text-xs font-semibold text-white/45"><Clock3 aria-hidden="true" className="size-4 text-white/40" /> Recent bets</div><p className="mt-4 text-2xl font-bold tracking-tight text-white">{account.bets.length}</p><p className="mt-3 text-xs text-white/35">Real records, up to 20 shown below</p></div>
+        <div className="rounded-2xl border border-white/[0.08] bg-[#12141a] p-5"><div className="flex items-center gap-2 text-xs font-semibold text-white/45"><BadgeCheck aria-hidden="true" className="size-4 text-white/40" /> VIP status</div><p className="mt-4 text-base font-bold text-white">{account.vip?.name ?? 'No VIP activity yet.'}</p><p className="mt-3 text-xs text-white/35">Based on saved membership</p></div>
+        <div className="rounded-2xl border border-white/[0.08] bg-[#12141a] p-5"><div className="flex items-center gap-2 text-xs font-semibold text-white/45"><ShieldCheck aria-hidden="true" className="size-4 text-emerald-100/60" /> Active limits</div><p className="mt-4 text-2xl font-bold tracking-tight text-white">{account.limits.length}</p><Link href="/account/responsible-gaming" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-amber-100/70 hover:text-amber-100">Manage limits <ArrowUpRight aria-hidden="true" className="size-3.5" /></Link></div>
+      </section>
+
+      <section id="wallet" className="mt-7 grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
+        <div className="rounded-2xl border border-white/[0.08] bg-[#12141a] p-5 sm:p-6"><div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.035]"><CreditCard aria-hidden="true" className="size-4 text-white/55" /></div><div><h2 className="text-sm font-bold text-white">Wallet actions</h2><p className="mt-1 text-xs text-white/40">Payment services are not enabled.</p></div></div><div className="mt-5 rounded-xl border border-amber-100/10 bg-amber-100/[0.035] p-4"><p className="text-sm font-semibold text-white/80">Deposits and withdrawals are unavailable.</p><p className="mt-2 text-xs leading-5 text-white/45">PayMeGate credentials and verified provider webhook details are required before any payment can be initiated. Your balance cannot be changed from this page.</p></div></div>
+        <div className="rounded-2xl border border-white/[0.08] bg-[#12141a] p-5 sm:p-6"><div className="mb-5 flex items-center justify-between"><div><h2 className="text-sm font-bold text-white">Recent transactions</h2><p className="mt-1 text-xs text-white/40">Immutable wallet ledger entries</p></div></div>{account.transactions.length ? <div className="overflow-x-auto"><table className="w-full min-w-[480px] text-left text-xs"><thead className="text-white/35"><tr><th className="pb-3 font-medium">Type</th><th className="pb-3 font-medium">Description</th><th className="pb-3 text-right font-medium">Amount</th><th className="pb-3 pl-4 font-medium">Date</th></tr></thead><tbody>{account.transactions.map((transaction: any) => <tr key={transaction.id} className="border-t border-white/[0.06]"><td className="py-3 capitalize text-white/75">{transaction.type.replaceAll('_', ' ')}</td><td className="max-w-40 truncate py-3 text-white/45">{transaction.description || '—'}</td><td className="py-3 text-right font-semibold text-white">{formatMoney(transaction.amount, account!.wallet.currency)}</td><td className="py-3 pl-4 text-white/40">{new Date(transaction.created_at).toLocaleDateString()}</td></tr>)}</tbody></table></div> : <EmptyDataState title="No transactions yet." detail="Verified wallet activity will appear here." />}</div>
+      </section>
+
+      <section className="mt-7 grid gap-6 lg:grid-cols-2"><div className="rounded-2xl border border-white/[0.08] bg-[#12141a] p-5 sm:p-6"><h2 className="text-sm font-bold text-white">Bet history</h2><p className="mb-5 mt-1 text-xs text-white/40">Wagers and results recorded by the server</p>{account.bets.length ? <div className="overflow-x-auto"><table className="w-full min-w-[420px] text-left text-xs"><thead className="text-white/35"><tr><th className="pb-3 font-medium">Game</th><th className="pb-3 font-medium">Wager</th><th className="pb-3 font-medium">Payout</th><th className="pb-3 font-medium">Status</th></tr></thead><tbody>{account.bets.map((bet: any) => <tr key={bet.id} className="border-t border-white/[0.06]"><td className="py-3 text-white/75">{bet.game_name}</td><td className="py-3 text-white/55">{formatMoney(bet.wager_amount, account!.wallet.currency)}</td><td className="py-3 text-white/55">{formatMoney(bet.payout_amount, account!.wallet.currency)}</td><td className="py-3 capitalize text-white/45">{bet.status}</td></tr>)}</tbody></table></div> : <EmptyDataState title="No bets yet." detail="Your server-recorded game history will appear here." />}</div>
+        <div className="rounded-2xl border border-white/[0.08] bg-[#12141a] p-5 sm:p-6"><h2 className="text-sm font-bold text-white">Active bonuses</h2><p className="mb-5 mt-1 text-xs text-white/40">Only bonuses assigned to your account</p>{account.bonuses.length ? <div className="flex flex-col gap-3">{account.bonuses.map((bonus: any) => <div key={bonus.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"><div className="flex justify-between gap-3"><p className="text-sm font-semibold text-white">{bonus.name}</p><span className="text-xs text-amber-100/70">{formatMoney(bonus.bonus_balance, account!.wallet.currency)}</span></div><p className="mt-2 text-xs text-white/45">Wagering progress {bonus.wagering_completed} / {bonus.wagering_required}</p></div>)}</div> : <EmptyDataState title="No active bonuses." detail="There are no bonuses assigned to this account." />}</div>
+      </section>
+    </>}
+    <div className="mt-8 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 text-xs leading-5 text-white/40">Account: <span className="font-mono text-white/55">{session.user.id}</span><span className="mx-2 text-white/20">·</span>{session.user.email}</div>
+  </main></div>
+}

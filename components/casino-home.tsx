@@ -1,202 +1,286 @@
+'use client'
+
+import { useMemo, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
-  ArrowDown,
+  ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
+  BadgeCheck,
   CircleHelp,
+  Clock3,
+  Gamepad2,
+  Menu,
+  Search,
   ShieldCheck,
   Sparkles,
+  Wallet,
+  X,
 } from 'lucide-react'
+import { authClient } from '@/lib/auth/client'
+import type { GameRecord } from '@/lib/casino-data'
 
-const fizzLogo =
-  'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-Y8AO1sXutEFbjR1ynbyHq9DhYR3zbV.png'
-const lootLogo =
-  'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-aMGjsINjRaJbGtQfnKP2qHCs1a7ZXf.png'
-const lootReferral = 'https://loot.gg/r/zinx'
+type Promotion = { id: string; title: string; description: string; endsAt: string | null }
+type CasinoHomeProps = {
+  games: GameRecord[]
+  promotions: Promotion[]
+  currentPlayer: { id: string; name: string; email: string; balance: string | null; currency: string | null } | null
+  vipLevel: string | null
+  dataError: boolean
+}
 
-function SiteHeader() {
+const fizzLogo = 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-Y8AO1sXutEFbjR1ynbyHq9DhYR3zbV.png'
+const currencySymbols: Record<string, string> = { USD: '$', EUR: '€', GBP: '£' }
+
+function money(amount: string | null, currency: string | null) {
+  if (amount === null || currency === null) return 'Balance unavailable'
+  const number = Number(amount)
+  if (!Number.isFinite(number)) return 'Balance unavailable'
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(number)
+}
+
+function SiteHeader({ currentPlayer }: Pick<CasinoHomeProps, 'currentPlayer'>) {
+  const router = useRouter()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+
+  async function handleSignOut() {
+    setSigningOut(true)
+    try {
+      await authClient.signOut()
+      router.push('/')
+      router.refresh()
+    } finally {
+      setSigningOut(false)
+    }
+  }
+
   return (
-    <header className="sticky top-0 z-20 border-b border-white/[0.07] bg-[#09090d]/85 backdrop-blur-xl">
-      <div className="mx-auto flex h-[76px] max-w-7xl items-center justify-between px-5 sm:px-8">
-        <a href="#top" className="flex items-center gap-3" aria-label="Fizz Casino home">
-          <img
-            src={fizzLogo}
-            alt="Fizz Casino"
-            className="h-12 w-[58px] object-contain"
-          />
-          <span className="text-[15px] font-extrabold tracking-[0.19em] text-white">FIZZ</span>
-        </a>
+    <header className="sticky top-0 z-30 border-b border-white/[0.07] bg-[#0b0c10]/90 backdrop-blur-xl">
+      <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between px-4 sm:px-8">
+        <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="Fizz Casino home">
+          <img src={fizzLogo} alt="Fizz Casino" className="h-10 w-12 object-contain" />
+          <span className="text-[13px] font-black tracking-[0.2em] text-white">FIZZ</span>
+        </Link>
 
-        <nav aria-label="Main navigation" className="hidden items-center gap-8 md:flex">
-          <a className="text-sm text-white/65 transition hover:text-white" href="#games">Casino</a>
-          <a className="text-sm text-white/65 transition hover:text-white" href="#affiliate">Loot.gg offer</a>
-          <a className="text-sm text-white/65 transition hover:text-white" href="#play-safe">Play responsibly</a>
+        <nav aria-label="Main navigation" className="hidden items-center gap-7 lg:flex">
+          <Link className="nav-link" href="/">Home</Link>
+          <Link className="nav-link" href="/casino">Casino</Link>
+          <Link className="nav-link" href="/#games">Games</Link>
+          <Link className="nav-link" href="/#promotions">Promotions</Link>
+          <Link className="nav-link" href="/#vip">VIP</Link>
+          <Link className="nav-link" href="/support">Support</Link>
         </nav>
 
-        <a
-          href={lootReferral}
-          target="_blank"
-          rel="sponsored noopener noreferrer"
-          className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-4 py-2.5 text-sm font-semibold text-white transition hover:border-violet-300/50 hover:bg-white/10"
-        >
-          Visit Loot.gg <ArrowUpRight aria-hidden="true" className="size-4" />
-        </a>
+        <div className="hidden items-center gap-3 sm:flex">
+          {currentPlayer ? (
+            <>
+              <Link href="/account" className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.035] px-4 py-2.5 text-sm font-semibold text-white transition hover:border-amber-200/30">
+                <Wallet aria-hidden="true" className="size-4 text-amber-200" />
+                <span>{money(currentPlayer.balance, currentPlayer.currency)}</span>
+              </Link>
+              <details className="relative">
+                <summary className="flex size-10 cursor-pointer list-none items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-sm font-bold text-white transition hover:bg-white/10" aria-label="Open account menu">
+                  {currentPlayer.name.trim().charAt(0).toUpperCase() || 'A'}
+                </summary>
+                <div className="absolute right-0 top-12 z-40 flex min-w-48 flex-col gap-1 rounded-2xl border border-white/10 bg-[#15171c] p-2 shadow-xl">
+                  <span className="truncate px-3 py-2 text-xs text-white/45">{currentPlayer.email}</span>
+                  <Link href="/account" className="rounded-xl px-3 py-2 text-sm text-white/80 hover:bg-white/[0.06]">My account</Link>
+                  <button type="button" disabled={signingOut} onClick={handleSignOut} className="rounded-xl px-3 py-2 text-left text-sm text-white/80 hover:bg-white/[0.06] disabled:opacity-50">{signingOut ? 'Signing out…' : 'Sign out'}</button>
+                </div>
+              </details>
+            </>
+          ) : (
+            <>
+              <Link href="/auth/sign-in" className="rounded-full px-4 py-2.5 text-sm font-semibold text-white/70 transition hover:text-white">Log in</Link>
+              <Link href="/auth/sign-up" className="rounded-full bg-[#f4bc63] px-5 py-2.5 text-sm font-bold text-[#1a140b] transition hover:bg-[#ffd48d]">Join Fizz</Link>
+            </>
+          )}
+        </div>
+
+        <button type="button" aria-label={menuOpen ? 'Close menu' : 'Open menu'} aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)} className="flex size-10 items-center justify-center rounded-full border border-white/10 text-white sm:hidden">
+          {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+        </button>
       </div>
+      {menuOpen && (
+        <nav aria-label="Mobile navigation" className="flex flex-col gap-1 border-t border-white/[0.07] bg-[#0b0c10] px-4 py-4 sm:hidden">
+          <Link onClick={() => setMenuOpen(false)} className="mobile-nav-link" href="/">Home</Link>
+          <Link onClick={() => setMenuOpen(false)} className="mobile-nav-link" href="/casino">Casino</Link>
+          <Link onClick={() => setMenuOpen(false)} className="mobile-nav-link" href="/#games">Games</Link>
+          <Link onClick={() => setMenuOpen(false)} className="mobile-nav-link" href="/#promotions">Promotions</Link>
+          <Link onClick={() => setMenuOpen(false)} className="mobile-nav-link" href="/#vip">VIP</Link>
+          <Link onClick={() => setMenuOpen(false)} className="mobile-nav-link" href="/support">Support</Link>
+          {currentPlayer ? (
+            <Link onClick={() => setMenuOpen(false)} href="/account" className="mobile-nav-link">My account · {money(currentPlayer.balance, currentPlayer.currency)}</Link>
+          ) : (
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <Link onClick={() => setMenuOpen(false)} href="/auth/sign-in" className="mobile-action">Log in</Link>
+              <Link onClick={() => setMenuOpen(false)} href="/auth/sign-up" className="mobile-action mobile-action-primary">Join Fizz</Link>
+            </div>
+          )}
+        </nav>
+      )}
     </header>
   )
 }
 
-function LootAffiliateCard() {
+function GameCard({ game }: { game: GameRecord }) {
   return (
-    <section
-      id="affiliate"
-      aria-labelledby="affiliate-heading"
-      className="relative overflow-hidden rounded-[28px] border border-violet-300/15 bg-[linear-gradient(115deg,#17121f_0%,#100e17_58%,#171022_100%)] p-6 shadow-[0_30px_100px_-55px_rgba(147,51,234,0.45)] sm:p-9"
-    >
-      <div className="pointer-events-none absolute -right-20 -top-24 size-64 rounded-full bg-violet-500/10 blur-3xl" />
-      <div className="relative flex flex-col gap-7 md:flex-row md:items-center md:justify-between">
-        <div className="max-w-xl">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-violet-300/15 bg-violet-300/[0.07] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.17em] text-violet-200">
-            <Sparkles aria-hidden="true" className="size-3.5" /> Partner link
-          </div>
-          <h2 id="affiliate-heading" className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-            Check out Loot.gg
-          </h2>
-          <p className="mt-2 max-w-lg text-sm leading-6 text-white/60 sm:text-base">
-            Use my referral link to visit Loot.gg. My affiliate code is <strong className="font-semibold text-white">zinx</strong>.
-          </p>
-          <p className="mt-3 text-xs leading-5 text-white/40">
-            Affiliate disclosure: I may earn a commission if you use this link. Loot.gg is a third-party site; please review its terms and play responsibly.
-          </p>
-        </div>
-
-        <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center md:shrink-0">
-          <div className="flex h-[86px] w-[142px] items-center justify-center rounded-2xl border border-white/10 bg-black/35 px-3 py-2">
-            <img src={lootLogo} alt="Loot.gg" className="max-h-full max-w-full object-contain" />
-          </div>
-          <a
-            href={lootReferral}
-            target="_blank"
-            rel="sponsored noopener noreferrer"
-            className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-[#c084fc] px-5 text-sm font-bold text-[#190b23] transition hover:bg-[#d8a9ff] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-violet-200"
-          >
-            Visit with code zinx
-            <ArrowUpRight aria-hidden="true" className="size-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-          </a>
-        </div>
+    <article className="group overflow-hidden rounded-[22px] border border-white/[0.08] bg-[#12141a] transition duration-300 hover:-translate-y-1 hover:border-amber-200/25 hover:shadow-[0_20px_55px_-35px_rgba(244,188,99,.22)]">
+      <div className="relative aspect-[1.35/1] overflow-hidden bg-[radial-gradient(ellipse_at_60%_40%,rgba(93,77,112,.44),rgba(25,26,32,.2)_52%,rgba(15,16,21,.95)_100%)]">
+        {game.coverImageUrl ? <img src={game.coverImageUrl} alt="" loading="lazy" className="size-full object-cover transition duration-500 group-hover:scale-[1.04]" /> : <div className="flex size-full items-center justify-center"><Gamepad2 aria-hidden="true" className="size-10 text-white/20" /></div>}
+        <span className="absolute left-3 top-3 rounded-full border border-white/10 bg-black/40 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/70 backdrop-blur">{game.category}</span>
       </div>
-    </section>
+      <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+        <div className="min-w-0"><h3 className="truncate text-sm font-bold text-white">{game.name}</h3><p className="mt-1 truncate text-xs text-white/40">{game.provider}</p></div>
+        <span className="shrink-0 rounded-lg border border-white/[0.08] px-2 py-1 text-[10px] font-medium text-white/40">Launch unavailable</span>
+      </div>
+    </article>
   )
 }
 
-function GameLobbyEmptyState() {
+function GameLobby({ games, dataError }: Pick<CasinoHomeProps, 'games' | 'dataError'>) {
+  const [search, setSearch] = useState('')
+  const [category, setCategory] = useState('all')
+  const categories = useMemo(() => Array.from(new Set(games.map((game) => game.category))), [games])
+  const visibleGames = useMemo(() => games.filter((game) => {
+    const matchesCategory = category === 'all' || game.category === category
+    const query = search.trim().toLowerCase()
+    return matchesCategory && (!query || `${game.name} ${game.provider} ${game.category}`.toLowerCase().includes(query))
+  }), [category, games, search])
+
   return (
     <section id="games" aria-labelledby="games-heading" className="scroll-mt-28 py-20 sm:py-28">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-200/75">The lobby</p>
-          <h2 id="games-heading" className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">Games, when they&apos;re ready.</h2>
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+        <div><p className="eyebrow">The lobby</p><h2 id="games-heading" className="section-heading">Find your next favorite.</h2><p className="mt-3 max-w-lg text-sm leading-6 text-white/50">Every game shown here comes from the live catalog. No previews or made-up listings.</p></div>
+        <div className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.035] px-3 sm:max-w-[280px]">
+          <Search aria-hidden="true" className="size-4 shrink-0 text-white/35" />
+          <label className="sr-only" htmlFor="game-search">Search games</label>
+          <input id="game-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search games" className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/35" />
         </div>
-        <p className="max-w-md text-sm leading-6 text-white/50">
-          The game catalog isn&apos;t connected yet. We won&apos;t show made-up games or pretend anything is playable.
-        </p>
       </div>
-      <div className="mt-8 flex min-h-48 flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 bg-white/[0.025] px-6 text-center">
-        <div className="mb-4 flex size-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-cyan-100/80">
-          <CircleHelp aria-hidden="true" className="size-5" />
+      {!dataError && games.length > 0 && (
+        <div className="mt-6 flex gap-2 overflow-x-auto pb-1" aria-label="Game categories">
+          {['all', ...categories].map((item) => <button key={item} type="button" onClick={() => setCategory(item)} aria-pressed={category === item} className={`shrink-0 rounded-full border px-4 py-2 text-xs font-semibold capitalize transition ${category === item ? 'border-amber-200/40 bg-amber-200/10 text-amber-100' : 'border-white/10 bg-white/[0.025] text-white/55 hover:text-white'}`}>{item === 'all' ? 'All games' : item}</button>)}
         </div>
-        <p className="text-base font-semibold text-white">No games available.</p>
-        <p className="mt-1 text-sm text-white/45">There&apos;s no live game catalog to show right now.</p>
+      )}
+      {dataError ? (
+        <div className="empty-panel mt-8"><CircleHelp aria-hidden="true" className="size-6 text-amber-100/60" /><p className="mt-4 text-base font-semibold text-white">The game catalog is unavailable.</p><p className="mt-2 text-sm text-white/45">We could not load the live catalog. Please try again later.</p></div>
+      ) : visibleGames.length ? (
+        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{visibleGames.map((game) => <GameCard key={game.id} game={game} />)}</div>
+      ) : (
+        <div className="empty-panel mt-8"><Gamepad2 aria-hidden="true" className="size-6 text-amber-100/65" /><p className="mt-4 text-base font-semibold text-white">{search || category !== 'all' ? 'No games match your search.' : 'No games available.'}</p><p className="mt-2 text-sm text-white/45">The live game catalog is empty right now. We will only show games that are actually configured.</p></div>
+      )}
+    </section>
+  )
+}
+
+function PromotionSection({ promotions }: Pick<CasinoHomeProps, 'promotions'>) {
+  return (
+    <section id="promotions" className="scroll-mt-28 grid gap-6 border-y border-white/[0.07] py-12 md:grid-cols-[0.8fr_1.2fr] md:items-center md:py-16">
+      <div><p className="eyebrow">Offers, honestly</p><h2 className="mt-3 text-2xl font-bold tracking-tight text-white sm:text-3xl">Promotions with no fine-print surprises.</h2><p className="mt-3 max-w-md text-sm leading-6 text-white/45">Only published offers from the live promotions catalog appear here.</p></div>
+      {promotions.length ? <div className="grid gap-3 sm:grid-cols-2">{promotions.map((promotion) => <article key={promotion.id} className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5"><div className="flex items-center gap-2 text-xs font-semibold text-amber-100/70"><Sparkles aria-hidden="true" className="size-3.5" /> Live promotion</div><h3 className="mt-3 font-semibold text-white">{promotion.title}</h3><p className="mt-2 text-sm leading-6 text-white/45">{promotion.description}</p>{promotion.endsAt && <p className="mt-4 text-xs text-white/35">Ends {new Date(promotion.endsAt).toLocaleDateString()}</p>}</article>)}</div> : <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-6 py-8 text-center"><p className="text-sm font-semibold text-white/75">No promotions available.</p><p className="mt-2 text-xs text-white/40">There are no active offers in the database.</p></div>}
+    </section>
+  )
+}
+
+function VipSection({ currentPlayer, vipLevel }: Pick<CasinoHomeProps, 'currentPlayer' | 'vipLevel'>) {
+  return (
+    <section id="vip" className="scroll-mt-28 py-16 sm:py-20">
+      <div className="relative overflow-hidden rounded-[28px] border border-amber-100/10 bg-[linear-gradient(112deg,#181715,#121316_55%,#191714)] p-6 sm:p-10">
+        <div className="pointer-events-none absolute -right-24 -top-28 size-72 rounded-full bg-amber-200/[0.06] blur-[90px]" />
+        <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+          <div className="max-w-xl"><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-amber-100/70"><BadgeCheck aria-hidden="true" className="size-4" /> Fizz VIP</div><h2 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl">A little extra, earned.</h2><p className="mt-3 text-sm leading-6 text-white/50">VIP tiers and benefits are configured by the casino team. Progress is based on recorded play, never estimates.</p></div>
+          <div className="min-w-52 rounded-2xl border border-white/[0.08] bg-black/20 px-5 py-4"><p className="text-xs text-white/40">{currentPlayer ? 'Your current status' : 'Member access'}</p><p className="mt-2 text-sm font-semibold text-white">{currentPlayer ? vipLevel ?? 'No VIP activity yet.' : 'Sign in to view your status.'}</p></div>
+        </div>
       </div>
     </section>
   )
 }
 
-function ResponsiblePlay() {
+export function CasinoHome({ games, promotions, currentPlayer, vipLevel, dataError }: CasinoHomeProps) {
+  const balance = currentPlayer ? money(currentPlayer.balance, currentPlayer.currency) : null
   return (
-    <section id="play-safe" className="scroll-mt-28 border-t border-white/[0.07] py-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-200/10 bg-emerald-200/[0.06] text-emerald-100/80">
-          <ShieldCheck aria-hidden="true" className="size-5" />
-        </div>
-        <div>
-          <h2 className="text-sm font-semibold text-white">Keep play in balance</h2>
-          <p className="mt-1 max-w-3xl text-xs leading-5 text-white/45">
-            Only participate where it&apos;s legal and if you meet the legal age in your location. Set limits, take breaks, and never play with money you can&apos;t afford to lose. No games or account services are currently available on this site.
-          </p>
-        </div>
-        <a href="https://www.begambleaware.org/" target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-white/60 transition hover:text-white sm:ml-auto">
-          Get support <ArrowUpRight aria-hidden="true" className="size-3.5" />
-        </a>
-      </div>
-    </section>
-  )
-}
-
-export function CasinoHome() {
-  return (
-    <div id="top" className="min-h-screen overflow-hidden bg-[#09090d] text-white">
-      <SiteHeader />
+    <div className="min-h-screen overflow-hidden bg-[#0b0c10] text-white">
+      <SiteHeader currentPlayer={currentPlayer} />
       <main>
-        <section className="relative isolate mx-auto grid min-h-[620px] max-w-7xl items-center gap-10 px-5 pb-16 pt-14 sm:px-8 md:grid-cols-[1.02fr_0.98fr] md:py-20 lg:min-h-[700px]">
-          <div className="pointer-events-none absolute -left-44 top-10 -z-10 size-[440px] rounded-full bg-cyan-500/[0.07] blur-[110px]" />
-          <div className="pointer-events-none absolute right-0 top-24 -z-10 size-[390px] rounded-full bg-orange-500/[0.06] blur-[115px]" />
+        <section className="relative isolate mx-auto grid min-h-[620px] max-w-[1440px] items-center gap-10 px-5 pb-16 pt-14 sm:px-8 md:grid-cols-[1.04fr_0.96fr] md:py-20 lg:min-h-[700px]">
+          <div className="pointer-events-none absolute -left-44 top-8 -z-10 size-[440px] rounded-full bg-sky-400/[0.06] blur-[110px]" />
+          <div className="pointer-events-none absolute right-0 top-16 -z-10 size-[390px] rounded-full bg-amber-300/[0.055] blur-[115px]" />
           <div className="relative z-10">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.035] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/60">
-              <span className="size-1.5 rounded-full bg-cyan-300 shadow-[0_0_12px_rgba(103,232,249,.8)]" />
-              Welcome to Fizz
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.035] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55"><span className="size-1.5 rounded-full bg-emerald-300" /> Welcome to Fizz</div>
+            <h1 className="mt-7 max-w-xl text-[clamp(3.4rem,8vw,6.25rem)] font-black leading-[0.94] tracking-[-0.065em] text-white">A little more <span className="bg-gradient-to-r from-amber-100 via-[#f4bc63] to-[#d7a165] bg-clip-text text-transparent">spark.</span></h1>
+            <p className="mt-6 max-w-lg text-base leading-7 text-white/55 sm:text-lg">A fresh take on your favorite games. Explore the Fizz lobby, keep your play in balance, and see your account exactly as it is.</p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <Link href={currentPlayer ? '#games' : '/auth/sign-up'} className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-[#f4bc63] px-6 text-sm font-bold text-[#1a140b] transition hover:bg-[#ffd48d]">{currentPlayer ? 'Explore the lobby' : 'Create your account'} <ArrowRight aria-hidden="true" className="size-4 transition-transform group-hover:translate-x-1" /></Link>
+              <Link href={currentPlayer ? '/account' : '/auth/sign-in'} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-white/12 px-6 text-sm font-semibold text-white/75 transition hover:border-white/25 hover:text-white">{currentPlayer ? <><Wallet aria-hidden="true" className="size-4" /> Wallet · {balance}</> : <>Log in <ArrowUpRight aria-hidden="true" className="size-4" /></>}</Link>
             </div>
-            <h1 className="mt-7 max-w-xl text-5xl font-black leading-[0.98] tracking-[-0.055em] text-white sm:text-6xl lg:text-[76px]">
-              A little more <span className="bg-gradient-to-r from-amber-200 via-orange-400 to-cyan-300 bg-clip-text text-transparent">spark.</span>
-            </h1>
-            <p className="mt-6 max-w-md text-base leading-7 text-white/55 sm:text-lg">
-              Welcome to Fizz Casino. We&apos;re getting the lobby ready — in the meantime, find my Loot.gg referral below.
-            </p>
-            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <a href="#affiliate" className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-white px-6 text-sm font-bold text-[#111116] transition hover:bg-cyan-100 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">
-                See my Loot.gg link <ArrowRight aria-hidden="true" className="size-4 transition-transform group-hover:translate-x-1" />
-              </a>
-              <a href="#games" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-white/12 px-6 text-sm font-semibold text-white/75 transition hover:border-white/25 hover:text-white">
-                Explore the lobby <ArrowDown aria-hidden="true" className="size-4" />
-              </a>
-            </div>
-            <div className="mt-8 flex items-center gap-3 text-xs text-white/40">
-              <ShieldCheck aria-hidden="true" className="size-4 text-emerald-200/70" />
-              Responsible play comes first
-            </div>
+            <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-white/40"><span className="inline-flex items-center gap-2"><ShieldCheck aria-hidden="true" className="size-4 text-emerald-200/70" /> Responsible play first</span><span className="inline-flex items-center gap-2"><Clock3 aria-hidden="true" className="size-4 text-white/35" /> 18+ · Play within your limits</span></div>
           </div>
-
-          <div className="relative mx-auto w-full max-w-[530px]">
-            <div className="absolute inset-8 rounded-full bg-cyan-400/[0.09] blur-[80px]" />
-            <div className="relative overflow-hidden rounded-[34px] border border-white/[0.08] bg-[radial-gradient(ellipse_at_52%_42%,rgba(15,24,49,.9),rgba(13,13,19,.6)_68%)] p-3 shadow-[0_30px_100px_-50px_rgba(34,211,238,.28)] sm:p-5">
-              <img
-                src={fizzLogo}
-                alt="Fizz Casino logo in vivid blue and orange lettering"
-                fetchPriority="high"
-                className="relative z-10 mx-auto aspect-[1.1/1] w-full object-contain drop-shadow-[0_20px_45px_rgba(0,0,0,.6)]"
-              />
-              <div className="absolute bottom-5 left-5 right-5 flex items-center justify-between rounded-2xl border border-white/[0.08] bg-[#09090d]/75 px-4 py-3 backdrop-blur-lg sm:bottom-7 sm:left-7 sm:right-7">
-                <span className="text-xs font-medium text-white/55">The Fizz experience</span>
-                <span className="rounded-full border border-cyan-200/15 bg-cyan-200/[0.07] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.13em] text-cyan-100/80">Coming soon</span>
-              </div>
+          <div className="relative mx-auto w-full max-w-[550px]">
+            <div className="absolute inset-8 rounded-full bg-sky-300/[0.07] blur-[85px]" />
+            <div className="relative overflow-hidden rounded-[34px] border border-white/[0.08] bg-[radial-gradient(ellipse_at_54%_38%,rgba(39,53,69,.58),rgba(20,21,27,.82)_58%,rgba(15,16,21,.95)_100%)] p-4 shadow-[0_32px_100px_-52px_rgba(132,169,190,.26)] sm:p-6">
+              <div className="absolute inset-0 bg-[linear-gradient(140deg,transparent_24%,rgba(255,255,255,.025)_24.2%,transparent_24.5%,transparent_75%,rgba(255,255,255,.02)_75.2%,transparent_75.6%)]" />
+              <img src={fizzLogo} alt="Official Fizz Casino logo" fetchPriority="high" className="relative z-10 mx-auto aspect-[1.1/1] w-full object-contain drop-shadow-[0_20px_45px_rgba(0,0,0,.58)]" />
+              <div className="absolute bottom-5 left-5 right-5 flex items-center justify-between rounded-2xl border border-white/[0.08] bg-[#0b0c10]/75 px-4 py-3 backdrop-blur-lg sm:bottom-7 sm:left-7 sm:right-7"><span className="text-xs font-medium text-white/55">The Fizz experience</span><span className="rounded-full border border-amber-100/15 bg-amber-100/[0.06] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.13em] text-amber-100/75">Live catalog</span></div>
             </div>
           </div>
         </section>
 
-        <div className="mx-auto max-w-7xl px-5 sm:px-8">
-          <LootAffiliateCard />
-          <GameLobbyEmptyState />
-          <ResponsiblePlay />
+        <div className="mx-auto max-w-[1440px] px-5 sm:px-8">
+          <GameLobby games={games} dataError={dataError} />
+          <PromotionSection promotions={promotions} />
+          <VipSection currentPlayer={currentPlayer} vipLevel={vipLevel} />
+          <section id="responsible-play" className="scroll-mt-28 border-t border-white/[0.07] py-9">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center"><div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-200/10 bg-emerald-200/[0.055] text-emerald-100/75"><ShieldCheck aria-hidden="true" className="size-5" /></div><div><h2 className="text-sm font-semibold text-white">Keep play in balance</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-white/45">Only play where it is legal and if you meet the legal age in your location. Set limits, take breaks, and never play with money you cannot afford to lose. Responsible gaming settings are available in your account.</p></div><Link href="/account/responsible-gaming" className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-white/60 transition hover:text-white sm:ml-auto">Review your limits <ArrowDownRight aria-hidden="true" className="size-3.5" /></Link></div>
+          </section>
+          <section id="support" className="flex flex-col gap-3 border-t border-white/[0.07] py-8 sm:flex-row sm:items-center"><div><h2 className="text-sm font-semibold text-white">Here when you need us.</h2><p className="mt-1 text-xs text-white/45">Open a support ticket or follow up on a conversation.</p></div><Link href="/support" className="inline-flex items-center gap-1 text-xs font-semibold text-white/60 hover:text-white sm:ml-auto">Visit support <ArrowRight aria-hidden="true" className="size-3.5" /></Link></section>
         </div>
       </main>
-      <footer className="border-t border-white/[0.07]">
-        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-5 py-6 text-xs text-white/35 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-          <span>© {new Date().getFullYear()} Fizz Casino</span>
-          <span>Loot.gg is a third-party service. Affiliate link: loot.gg/r/zinx</span>
-        </div>
-      </footer>
+      <footer className="border-t border-white/[0.07]"><div className="mx-auto flex max-w-[1440px] flex-col gap-3 px-5 py-6 text-xs text-white/35 sm:flex-row sm:items-center sm:justify-between sm:px-8"><span>© {new Date().getFullYear()} Fizz Casino</span><div className="flex gap-4"><Link href="/account/responsible-gaming" className="transition hover:text-white/70">Responsible gaming</Link><Link href="/support" className="transition hover:text-white/70">Support</Link></div></div></footer>
     </div>
   )
 }
 
-export { lootReferral }
+export function LobbyPage({ games, dataError, currentPlayer }: Pick<CasinoHomeProps, 'games' | 'dataError' | 'currentPlayer'>) {
+  return <div className="min-h-screen bg-[#0b0c10] text-white"><SiteHeader currentPlayer={currentPlayer} /><main className="mx-auto max-w-[1440px] px-5 sm:px-8"><div className="pt-14 sm:pt-20"><p className="eyebrow">Fizz Casino</p><h1 className="section-heading">The lobby.</h1></div><GameLobby games={games} dataError={dataError} /></main></div>
+}
 
+export function formatMoney(amount: string, currency = 'USD') {
+  const symbol = currencySymbols[currency]
+  return symbol ? `${symbol}${Number(amount).toFixed(2)}` : money(amount, currency)
+}
+
+export function EmptyDataState({ title, detail }: { title: string; detail: string }) {
+  return <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-5 py-8 text-center"><CircleHelp aria-hidden="true" className="mx-auto size-5 text-white/35" /><p className="mt-3 text-sm font-semibold text-white/75">{title}</p><p className="mt-1 text-xs leading-5 text-white/40">{detail}</p></div>
+}
+
+export function CasinoPageHeader({ title, eyebrow, detail }: { title: string; eyebrow: string; detail?: string }) {
+  return <div className="mb-8"><p className="eyebrow">{eyebrow}</p><h1 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">{title}</h1>{detail && <p className="mt-3 max-w-2xl text-sm leading-6 text-white/50">{detail}</p>}</div>
+}
+
+export function CasinoHeaderForAccount() {
+  return <div className="border-b border-white/[0.07] bg-[#0b0c10]"><div className="mx-auto flex h-[68px] max-w-7xl items-center justify-between px-5 sm:px-8"><Link href="/" className="flex items-center gap-2" aria-label="Fizz Casino home"><img src={fizzLogo} alt="Fizz Casino" className="h-9 w-11 object-contain" /><span className="text-xs font-black tracking-[0.2em]">FIZZ</span></Link><Link href="/" className="text-sm text-white/55 hover:text-white">Back to lobby <ArrowUpRight aria-hidden="true" className="ml-1 inline size-3.5" /></Link></div></div>
+}
+
+export function AccountNavigation({ active }: { active: 'overview' | 'responsible' | 'support' }) {
+  const items = [{ id: 'overview', href: '/account', label: 'Overview' }, { id: 'responsible', href: '/account/responsible-gaming', label: 'Responsible gaming' }, { id: 'support', href: '/support', label: 'Support' }] as const
+  return <nav aria-label="Account navigation" className="mb-7 flex gap-2 overflow-x-auto border-b border-white/[0.08] pb-3">{items.map((item) => <Link key={item.id} href={item.href} aria-current={active === item.id ? 'page' : undefined} className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold transition ${active === item.id ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>{item.label}</Link>)}</nav>
+}
+
+export function DataTableEmptyRow({ title, detail }: { title: string; detail: string }) {
+  return <EmptyDataState title={title} detail={detail} />
+}
+
+export function AccountIcon({ type }: { type: 'wallet' | 'vip' | 'clock' }) {
+  const Icon = type === 'wallet' ? Wallet : type === 'vip' ? BadgeCheck : Clock3
+  return <Icon aria-hidden="true" className="size-4" />
+}
+
+export function SearchIcon() { return <Search aria-hidden="true" className="size-4" /> }
+export function HeaderMenuIcon() { return <Menu aria-hidden="true" className="size-4" /> }
+export function UpRightIcon() { return <ArrowUpRight aria-hidden="true" className="size-4" /> }
+export function HelpIcon() { return <CircleHelp aria-hidden="true" className="size-5" /> }
+export function GameIcon() { return <Gamepad2 aria-hidden="true" className="size-5" /> }
+export function ShieldIcon() { return <ShieldCheck aria-hidden="true" className="size-5" /> }
