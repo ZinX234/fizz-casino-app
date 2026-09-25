@@ -31,8 +31,6 @@ type CasinoHomeProps = {
 }
 
 const fizzLogo = 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-Y8AO1sXutEFbjR1ynbyHq9DhYR3zbV.png'
-const currencySymbols: Record<string, string> = { USD: '$', EUR: '€', GBP: '£' }
-
 function money(amount: string | null, currency: string | null) {
   if (amount === null || currency === null) return 'Balance unavailable'
   const number = Number(amount)
@@ -245,11 +243,6 @@ export function CasinoHome({ games, promotions, currentPlayer, vipLevel, dataErr
 
 export function LobbyPage({ games, dataError, currentPlayer }: Pick<CasinoHomeProps, 'games' | 'dataError' | 'currentPlayer'>) {
   return <div className="min-h-screen bg-[#0b0c10] text-white"><SiteHeader currentPlayer={currentPlayer} /><main className="mx-auto max-w-[1440px] px-5 sm:px-8"><div className="pt-14 sm:pt-20"><p className="eyebrow">Fizz Casino</p><h1 className="section-heading">The lobby.</h1></div><GameLobby games={games} dataError={dataError} /></main></div>
-}
-
-export function formatMoney(amount: string, currency = 'USD') {
-  const symbol = currencySymbols[currency]
-  return symbol ? `${symbol}${Number(amount).toFixed(2)}` : money(amount, currency)
 }
 
 export function EmptyDataState({ title, detail }: { title: string; detail: string }) {

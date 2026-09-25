@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   }
 
   return Response.json(
-    { error: 'Deposits are unavailable until PayMeGate API and webhook verification are configured.', code: 'PAYMENT_PROVIDER_UNAVAILABLE' },
+    { error: 'Deposits are unavailable until PAYMEGATE_API_KEY and verified PayMeGate webhook signing are configured.', code: 'PAYMENT_PROVIDER_UNAVAILABLE' },
     { status: 503 },
   )
 }
