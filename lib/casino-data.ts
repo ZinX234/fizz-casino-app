@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { ensureBuiltInGames } from '@/lib/casino-games'
 import { databasePool, withTransaction } from '@/lib/db'
 
 export interface GameRecord {
@@ -14,6 +15,7 @@ export interface GameRecord {
 }
 
 export async function getAvailableGames(): Promise<GameRecord[]> {
+  await ensureBuiltInGames()
   const { rows } = await databasePool.query<GameRecord>(
     `SELECT id::text, slug, name, provider, category, description,
             cover_image_url AS "coverImageUrl", featured

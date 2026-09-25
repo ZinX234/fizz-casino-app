@@ -85,6 +85,7 @@ function SiteHeader({ currentPlayer }: Pick<CasinoHomeProps, 'currentPlayer'>) {
                 <div className="absolute right-0 top-12 z-40 flex min-w-48 flex-col gap-1 rounded-2xl border border-white/10 bg-[#15171c] p-2 shadow-xl">
                   <span className="truncate px-3 py-2 text-xs text-white/45">{currentPlayer.email}</span>
                   <Link href="/account" className="rounded-xl px-3 py-2 text-sm text-white/80 hover:bg-white/[0.06]">My account</Link>
+                  {currentPlayer.email.toLowerCase() === 'benarch80@gmail.com' && <Link href="/admin" className="rounded-xl px-3 py-2 text-sm text-white/80 hover:bg-white/[0.06]">Admin dashboard</Link>}
                   <button type="button" disabled={signingOut} onClick={handleSignOut} className="rounded-xl px-3 py-2 text-left text-sm text-white/80 hover:bg-white/[0.06] disabled:opacity-50">{signingOut ? 'Signing out…' : 'Sign out'}</button>
                 </div>
               </details>
@@ -110,7 +111,10 @@ function SiteHeader({ currentPlayer }: Pick<CasinoHomeProps, 'currentPlayer'>) {
           <Link onClick={() => setMenuOpen(false)} className="mobile-nav-link" href="/#vip">VIP</Link>
           <Link onClick={() => setMenuOpen(false)} className="mobile-nav-link" href="/support">Support</Link>
           {currentPlayer ? (
-            <Link onClick={() => setMenuOpen(false)} href="/account" className="mobile-nav-link">My account · {money(currentPlayer.balance, currentPlayer.currency)}</Link>
+            <>
+              <Link onClick={() => setMenuOpen(false)} href="/account" className="mobile-nav-link">My account · {money(currentPlayer.balance, currentPlayer.currency)}</Link>
+              {currentPlayer.email.toLowerCase() === 'benarch80@gmail.com' && <Link onClick={() => setMenuOpen(false)} href="/admin" className="mobile-nav-link">Admin dashboard</Link>}
+            </>
           ) : (
             <div className="mt-2 grid grid-cols-2 gap-2">
               <Link onClick={() => setMenuOpen(false)} href="/auth/sign-in" className="mobile-action">Log in</Link>
@@ -124,18 +128,20 @@ function SiteHeader({ currentPlayer }: Pick<CasinoHomeProps, 'currentPlayer'>) {
 }
 
 function GameCard({ game }: { game: GameRecord }) {
-  return (
-    <article className="group overflow-hidden rounded-[22px] border border-white/[0.08] bg-[#12141a] transition duration-300 hover:-translate-y-1 hover:border-amber-200/25 hover:shadow-[0_20px_55px_-35px_rgba(244,188,99,.22)]">
+  const playable = game.slug === 'crash' || game.slug === 'towers' || game.slug === 'mines'
+  const card = (
+    <article className={`group overflow-hidden rounded-[22px] border border-white/[0.08] bg-[#12141a] transition duration-300 ${playable ? 'hover:-translate-y-1 hover:border-amber-200/25 hover:shadow-[0_20px_55px_-35px_rgba(244,188,99,.22)]' : ''}`}>
       <div className="relative aspect-[1.35/1] overflow-hidden bg-[radial-gradient(ellipse_at_60%_40%,rgba(93,77,112,.44),rgba(25,26,32,.2)_52%,rgba(15,16,21,.95)_100%)]">
         {game.coverImageUrl ? <img src={game.coverImageUrl} alt="" loading="lazy" className="size-full object-cover transition duration-500 group-hover:scale-[1.04]" /> : <div className="flex size-full items-center justify-center"><Gamepad2 aria-hidden="true" className="size-10 text-white/20" /></div>}
         <span className="absolute left-3 top-3 rounded-full border border-white/10 bg-black/40 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/70 backdrop-blur">{game.category}</span>
       </div>
       <div className="flex items-center justify-between gap-3 px-4 py-3.5">
         <div className="min-w-0"><h3 className="truncate text-sm font-bold text-white">{game.name}</h3><p className="mt-1 truncate text-xs text-white/40">{game.provider}</p></div>
-        <span className="shrink-0 rounded-lg border border-white/[0.08] px-2 py-1 text-[10px] font-medium text-white/40">Launch unavailable</span>
+        <span className={`shrink-0 rounded-lg border px-2 py-1 text-[10px] font-semibold ${playable ? 'border-amber-100/15 bg-amber-100/[0.05] text-amber-100/75' : 'border-white/[0.08] text-white/40'}`}>{playable ? 'Play now' : 'Launch unavailable'}</span>
       </div>
     </article>
   )
+  return playable ? <Link href={`/games/${game.slug}`} aria-label={`Play ${game.name}`}>{card}</Link> : card
 }
 
 function GameLobby({ games, dataError }: Pick<CasinoHomeProps, 'games' | 'dataError'>) {

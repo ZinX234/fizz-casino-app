@@ -7,8 +7,8 @@ export const metadata: Metadata = {
     default: 'Fizz Casino — A Little More Spark',
     template: '%s | Fizz Casino',
   },
-  description: 'Explore the Fizz Casino lobby, manage your account, and keep play in balance.',
-  openGraph: { title: 'Fizz Casino — A Little More Spark', description: 'Explore the Fizz Casino lobby and manage your account.', type: 'website' },
+  description: 'Play Crash, Towers, and Mines with published game odds, manage your account, and keep play in balance.',
+  openGraph: { title: 'Fizz Casino — A Little More Spark', description: 'Play Fizz original games with published return-to-player settings.', type: 'website' },
   applicationName: 'Fizz Casino',
   generator: 'v0.app',
   icons: {
