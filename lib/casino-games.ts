@@ -5,6 +5,7 @@ import type { PoolClient } from 'pg'
 import { databasePool, withTransaction } from '@/lib/db'
 import type { CasinoGameSlug, GameRoundView, GameRtpSetting } from '@/lib/casino-game-types'
 import { xpForFizzcoinWager } from '@/lib/progression'
+import { payoutMultiplierForSafePicks } from '@/lib/casino-payout-math'
 import { assertVaultHeistConfig, cloneDefaultVaultHeistConfig, payoutMultiplierForRtp, payoutMultiplierForVaultPick, sanitizeVaultHeistConfig, type VaultHeistConfig, type VaultHeistOutcome, type VaultHeistProfile } from '@/lib/vault-heist-config'
 
 export const CASINO_OWNER_EMAIL = 'benarch80@gmail.com'
@@ -663,13 +664,8 @@ async function settleRound(
 }
 
 function multiplierForSafePicks(slug: CasinoGameSlug, picks: number, mineCount: number, rtpBps: number) {
-  let survivalProbability = 1
-  if (slug === 'towers') survivalProbability = (2 / 3) ** picks
-  else {
-    for (let index = 0; index < picks; index++) survivalProbability *= (25 - mineCount - index) / (25 - index)
-  }
-  const raw = (rtpBps / 10_000) / survivalProbability
-  return Math.floor(raw * 100) / 100
+  if (slug !== 'towers' && slug !== 'mines') throw new CasinoGameError('Safe-pick payout requested for an unsupported game.', 500)
+  return payoutMultiplierForSafePicks(slug, picks, mineCount, rtpBps)
 }
 
 export async function playCasinoAction(input: {

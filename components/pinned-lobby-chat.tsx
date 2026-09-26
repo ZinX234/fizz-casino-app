@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, type FormEvent, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { Crown, MessageCircle, Pin, PinOff, Send, X } from 'lucide-react'
@@ -16,6 +16,7 @@ type LobbyMessage = {
 }
 
 type ChatPayload = { messages: LobbyMessage[]; canSend: boolean }
+type ChatPreference = { pinned: boolean; canPersist: boolean }
 type ChatControls = { openChat: () => void }
 
 const ChatContext = createContext<ChatControls | null>(null)
@@ -26,6 +27,12 @@ const chatFetcher = async (url: string): Promise<ChatPayload> => {
   return response.json()
 }
 
+const preferenceFetcher = async (url: string): Promise<ChatPreference> => {
+  const response = await fetch(url, { cache: 'no-store' })
+  if (!response.ok) throw new Error('Chat preferences could not be loaded.')
+  return response.json()
+}
+
 export function usePinnedLobbyChat() {
   const context = useContext(ChatContext)
   if (!context) throw new Error('usePinnedLobbyChat must be used inside PinnedLobbyChatProvider.')
@@ -33,23 +40,60 @@ export function usePinnedLobbyChat() {
 }
 
 export function PinnedLobbyChatProvider({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false)
-  const [pinned, setPinned] = useState(false)
+  const [open, setOpen] = useState(true)
+  const [pinned, setPinned] = useState(true)
+  const [preferenceError, setPreferenceError] = useState('')
+  const appliedPreference = useRef(false)
+  const { data: preference, isLoading: preferenceLoading, mutate: mutatePreference } = useSWR('/api/account/preferences', preferenceFetcher, { revalidateOnFocus: true })
   const docked = open && pinned
+
+  useEffect(() => {
+    if (!preference || appliedPreference.current) return
+    appliedPreference.current = true
+    setPinned(preference.pinned)
+    setOpen(preference.pinned)
+  }, [preference])
+
+  async function togglePinned() {
+    if (preferenceLoading) return
+    const nextPinned = !pinned
+    setPinned(nextPinned)
+    setOpen(true)
+    setPreferenceError('')
+    if (!preference?.canPersist) {
+      await mutatePreference({ pinned: nextPinned, canPersist: false }, { revalidate: false })
+      return
+    }
+
+    try {
+      const response = await fetch('/api/account/preferences', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ pinned: nextPinned }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Chat preference could not be saved.')
+      await mutatePreference(result, { revalidate: false })
+    } catch (issue) {
+      setPinned(pinned)
+      setPreferenceError(issue instanceof Error ? issue.message : 'Chat preference could not be saved.')
+      await mutatePreference()
+    }
+  }
 
   return (
     <ChatContext.Provider value={{ openChat: () => setOpen(true) }}>
       <div className={docked ? 'md:mr-[320px]' : undefined}>{children}</div>
       {open && !pinned && <button type="button" aria-label="Close lobby chat" onClick={() => setOpen(false)} className="fixed inset-0 z-40 cursor-default bg-black/35 md:bg-transparent" />}
-      <section aria-label="Fizz lobby chat" aria-hidden={!open} inert={!open} className={`fixed bottom-20 right-3 z-50 flex h-[min(620px,calc(100dvh-7rem))] w-[min(350px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-white/[0.12] bg-[#121318] shadow-[0_24px_80px_-28px_rgba(0,0,0,.9)] transition duration-200 md:bottom-5 md:right-5 ${pinned ? 'md:inset-y-0 md:right-0 md:bottom-0 md:h-dvh md:w-[320px] md:rounded-none md:border-y-0 md:border-r-0' : ''} ${open ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0'}`}>
-        <LobbyChatPanel open={open} onClose={() => setOpen(false)} pinned={pinned} onTogglePin={() => { setPinned((current) => !current); setOpen(true) }} />
+      <section aria-label="Fizz lobby chat" aria-hidden={!open} inert={!open} className={`fixed bottom-20 right-3 z-50 flex h-[min(620px,calc(100dvh-7rem))] w-[min(350px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-white/[0.12] bg-[#121318] shadow-[0_24px_80px_-28px_rgba(0,0,0,.9)] transition duration-200 ${pinned ? 'md:inset-y-0 md:right-0 md:bottom-0 md:h-dvh md:w-[320px] md:rounded-none md:border-y-0 md:border-r-0' : 'md:bottom-5 md:right-5'} ${open ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0'}`}>
+        <LobbyChatPanel open={open} onClose={() => setOpen(false)} pinned={pinned} onTogglePin={() => { void togglePinned() }} preferenceError={preferenceError} pinDisabled={preferenceLoading} />
       </section>
-      {!open && <button type="button" onClick={() => setOpen(true)} aria-expanded={false} aria-label="Open lobby chat" className="fixed bottom-4 right-4 z-40 flex size-12 items-center justify-center rounded-full bg-[#6b19f5] text-white shadow-[0_10px_30px_-12px_rgba(107,25,245,.9)] transition hover:bg-[#792fff]"><MessageCircle aria-hidden="true" className="size-5" /></button>}
+      {!open && <button type="button" onClick={() => setOpen(true)} aria-expanded={false} aria-label={pinned ? 'Open pinned lobby chat' : 'Open lobby chat'} className="fixed bottom-4 right-4 z-40 flex size-12 items-center justify-center rounded-full bg-[#6b19f5] text-white shadow-[0_10px_30px_-12px_rgba(107,25,245,.9)] transition hover:bg-[#792fff]"><MessageCircle aria-hidden="true" className="size-5" /></button>}
     </ChatContext.Provider>
   )
 }
 
-function LobbyChatPanel({ open, onClose, pinned, onTogglePin }: { open: boolean; onClose: () => void; pinned: boolean; onTogglePin: () => void }) {
+function LobbyChatPanel({ open, onClose, pinned, onTogglePin, preferenceError, pinDisabled }: { open: boolean; onClose: () => void; pinned: boolean; onTogglePin: () => void; preferenceError: string; pinDisabled: boolean }) {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState('')
@@ -85,10 +129,11 @@ function LobbyChatPanel({ open, onClose, pinned, onTogglePin }: { open: boolean;
       <header className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3.5">
         <div><h2 className="text-sm font-bold text-white">Lobby chat</h2><p className="mt-1 text-[10px] text-white/40">Messages refresh automatically · be respectful</p></div>
         <div className="flex items-center gap-1">
-          <button type="button" onClick={onTogglePin} aria-label={pinned ? 'Unpin lobby chat' : 'Pin lobby chat to side'} aria-pressed={pinned} title={pinned ? 'Unpin chat' : 'Pin chat to side'} className="flex size-8 items-center justify-center rounded-full text-white/55 transition hover:bg-white/[0.06] hover:text-white">{pinned ? <PinOff aria-hidden="true" className="size-4" /> : <Pin aria-hidden="true" className="size-4" />}</button>
-          <button type="button" onClick={onClose} aria-label="Close lobby chat" className="flex size-8 items-center justify-center rounded-full text-white/55 transition hover:bg-white/[0.06] hover:text-white"><X aria-hidden="true" className="size-4" /></button>
+          <button type="button" onClick={onTogglePin} disabled={pinDisabled} aria-label={pinned ? 'Unpin lobby chat' : 'Pin lobby chat to side'} aria-pressed={pinned} title={pinned ? 'Unpin chat' : 'Pin chat to side'} className="flex size-8 items-center justify-center rounded-full text-white/55 transition hover:bg-white/[0.06] hover:text-white disabled:cursor-wait disabled:opacity-40">{pinned ? <PinOff aria-hidden="true" className="size-4" /> : <Pin aria-hidden="true" className="size-4" />}</button>
+          {!pinned && <button type="button" onClick={onClose} aria-label="Close lobby chat" className="flex size-8 items-center justify-center rounded-full text-white/55 transition hover:bg-white/[0.06] hover:text-white"><X aria-hidden="true" className="size-4" /></button>}
         </div>
       </header>
+      {preferenceError && <p role="alert" className="border-b border-rose-200/10 bg-rose-100/[0.04] px-4 py-2 text-[10px] text-rose-100/80">{preferenceError}</p>}
       <LobbyEconomy signedIn={canSend} />
       <div role="log" aria-label="Lobby chat messages" aria-live="polite" className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
         {isLoading && <p role="status" className="py-4 text-center text-xs text-white/45">Loading lobby chat…</p>}

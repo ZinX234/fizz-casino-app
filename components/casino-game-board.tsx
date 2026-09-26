@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { ArrowLeft, Check, CircleHelp, ShieldCheck, TriangleAlert } from 'lucide-react'
 import type { GameRoundView, GameRtpSetting } from '@/lib/casino-game-types'
+import { payoutMultiplierForSafePicks } from '@/lib/casino-payout-math'
 import { formatFizzcoins } from '@/lib/format-money'
 
 const gameNames = { crash: 'Crash', towers: 'Towers', mines: 'Mines', 'vault-heist': 'Vault Heist' } as const
@@ -191,12 +192,8 @@ function TowersBoard({ round, pending, onPick }: { round: GameRoundView | null; 
 }
 
 function payoutMultiplier(slug: 'mines' | 'towers', picks: number, mineCount: number, rtpBps: number) {
-  let probability = 1
-  if (slug === 'towers') probability = (2 / 3) ** picks
-  else for (let index = 0; index < picks; index++) probability *= (25 - mineCount - index) / (25 - index)
-  return Math.floor((rtpBps / 10_000 / probability) * 100) / 100
+  return payoutMultiplierForSafePicks(slug, picks, mineCount, rtpBps)
 }
-
 
 function gameDescription(slug: GameRtpSetting['slug']) {
   if (slug === 'crash') return 'Watch the multiplier climb, then cash out before the server-generated crash point.'
