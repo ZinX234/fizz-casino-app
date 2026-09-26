@@ -8,5 +8,8 @@ if (!cookieSecret || cookieSecret.length < 32) {
 
 export const auth = createNeonAuth({
   baseUrl: process.env.NEON_AUTH_BASE_URL!,
-  cookies: { secret: cookieSecret },
+  cookies: {
+    secret: cookieSecret,
+    ...(process.env.NODE_ENV === 'development' ? { sameSite: 'none' as const } : {}),
+  },
 })
