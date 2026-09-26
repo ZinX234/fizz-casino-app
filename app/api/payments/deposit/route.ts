@@ -5,7 +5,7 @@ import { consumeUserRateLimit, databasePool, withTransaction } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 
 const depositSchema = z.object({
-  amount: z.string().trim().regex(/^\d{1,5}(?:\.\d{1,2})?$/, 'Enter an amount with up to two decimal places.'),
+  amount: z.string().trim().max(8).regex(/^\d{1,5}(?:\.\d{1,2})?$/, 'Enter an amount with up to two decimal places.'),
 })
 
 const payMeGateOrderSchema = z.object({
@@ -33,11 +33,11 @@ class DepositPolicyError extends Error {
 function parseCents(value: string) {
   const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value)
   if (!match) return null
-  return BigInt(match[1]) * 100n + BigInt((match[2] ?? '').padEnd(2, '0'))
+  return BigInt(match[1]) * BigInt(100) + BigInt((match[2] ?? '').padEnd(2, '0'))
 }
 
 function formatCents(cents: bigint) {
-  return `${cents / 100n}.${String(cents % 100n).padStart(2, '0')}`
+  return `${cents / BigInt(100)}.${String(cents % BigInt(100)).padStart(2, '0')}`
 }
 
 function getBackUrl() {
@@ -65,31 +65,44 @@ export async function POST(request: Request) {
   const { data: session } = await auth.getSession()
   if (!session?.user) return Response.json({ error: 'Authentication required.' }, { status: 401 })
 
-  if (!process.env.PAYMEGATE_API_KEY?.trim() || !process.env.PAYMEGATE_WEBHOOK_SECRET?.trim()) {
+  const apiKey = process.env.PAYMEGATE_API_KEY?.trim()
+  const webhookSecret = process.env.PAYMEGATE_WEBHOOK_SECRET?.trim()
+  if (!apiKey || !webhookSecret) {
     return Response.json(
       { error: 'Secure PayMeGate deposits are not configured yet.', code: 'PAYMENT_PROVIDER_UNAVAILABLE' },
       { status: 503 },
     )
   }
 
-  const contentLength = Number(request.headers.get('content-length') ?? 0)
-  if (contentLength > 2_048) return Response.json({ error: 'Request body is too large.' }, { status: 413 })
+  const emailResult = await databasePool.query<{ email_verified: boolean }>(
+    `SELECT "emailVerified" AS email_verified FROM neon_auth."user" WHERE id = $1::uuid`,
+    [session.user.id],
+  )
+  if (!emailResult.rows[0]?.email_verified || !session.user.email) {
+    return Response.json({ error: 'Verify your account email before depositing.' }, { status: 403 })
+  }
+
+  let rawBody: ArrayBuffer
+  try {
+    rawBody = await request.arrayBuffer()
+  } catch {
+    return Response.json({ error: 'Invalid request body.' }, { status: 400 })
+  }
+  if (rawBody.byteLength === 0 || rawBody.byteLength > 2_048) {
+    return Response.json({ error: 'Request body is too large or empty.' }, { status: 413 })
+  }
 
   let payload: unknown
   try {
-    payload = await request.json()
+    payload = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(rawBody))
   } catch {
     return Response.json({ error: 'Invalid request body.' }, { status: 400 })
   }
 
   const parsed = depositSchema.safeParse(payload)
   const amountCents = parsed.success ? parseCents(parsed.data.amount) : null
-  if (!parsed.success || amountCents === null || amountCents <= 0n || amountCents > BigInt(MAX_DEPOSIT_CENTS)) {
+  if (!parsed.success || amountCents === null || amountCents <= BigInt(0) || amountCents > BigInt(MAX_DEPOSIT_CENTS)) {
     return Response.json({ error: 'Enter a valid deposit amount between $0.01 and $10,000.00.' }, { status: 400 })
-  }
-
-  if (!session.user.email) {
-    return Response.json({ error: 'A verified account email is required for PayMeGate checkout.' }, { status: 400 })
   }
 
   if (!(await consumeUserRateLimit(session.user.id, 'deposit-create', 5, 3600))) {
@@ -155,7 +168,7 @@ export async function POST(request: Request) {
              END`,
           [session.user.id, limit.period],
         )
-        const spentCents = parseCents(spentResult.rows[0]?.total ?? '0') ?? 0n
+        const spentCents = parseCents(spentResult.rows[0]?.total ?? '0') ?? BigInt(0)
         if (spentCents + amountCents > limitCents) {
           throw new DepositPolicyError(`This deposit would exceed your ${limit.period} deposit limit.`, 400)
         }
@@ -184,7 +197,7 @@ export async function POST(request: Request) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': process.env.PAYMEGATE_API_KEY,
+        'X-API-Key': apiKey,
       },
       body: JSON.stringify({
         amount,
@@ -200,6 +213,15 @@ export async function POST(request: Request) {
       signal: AbortSignal.timeout(15_000),
     })
   } catch (error) {
+    try {
+      await databasePool.query(
+        `UPDATE public.deposits SET status = 'failed', updated_at = now()
+         WHERE id = $1::uuid AND status = 'pending'`,
+        [depositId],
+      )
+    } catch {
+      console.error('[v0] PayMeGate deposit reservation could not be marked failed after a request error.')
+    }
     console.error('[v0] PayMeGate checkout request failed:', error instanceof Error ? error.name : 'unknown error')
     return Response.json({ error: 'PayMeGate could not start checkout. Please try again later.' }, { status: 502 })
   }

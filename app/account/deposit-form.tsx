@@ -14,6 +14,8 @@ export function DepositForm({ enabled, currency }: { enabled: boolean; currency:
 
     setError(null)
     setIsSubmitting(true)
+    const checkoutWindow = window.open('about:blank', '_blank')
+    if (checkoutWindow) checkoutWindow.opener = null
     try {
       const response = await fetch('/api/payments/deposit', {
         method: 'POST',
@@ -22,12 +24,15 @@ export function DepositForm({ enabled, currency }: { enabled: boolean; currency:
       })
       const result = await response.json().catch(() => null)
       if (!response.ok || typeof result?.checkoutUrl !== 'string') {
+        checkoutWindow?.close()
         setError(result?.error ?? 'Could not start checkout. Please try again later.')
         return
       }
 
-      window.location.assign(result.checkoutUrl)
+      if (checkoutWindow) checkoutWindow.location.replace(result.checkoutUrl)
+      else window.location.assign(result.checkoutUrl)
     } catch {
+      checkoutWindow?.close()
       setError('Could not connect to PayMeGate. Please try again later.')
     } finally {
       setIsSubmitting(false)
@@ -38,8 +43,9 @@ export function DepositForm({ enabled, currency }: { enabled: boolean; currency:
     return (
       <div role="status" className="mt-5 rounded-xl border border-amber-100/10 bg-amber-100/[0.035] p-4">
         <p className="text-sm font-semibold text-white/80">Secure deposits are not configured yet.</p>
-        <p className="mt-2 text-xs leading-5 text-white/55">Checkout remains disabled until both the PayMeGate API key and webhook signing secret are available to the server. Payments will only be credited after a valid signed confirmation.</p>
-        <p className="mt-3 break-all font-mono text-[11px] text-amber-100/65">https://build-fizz-casino-app.vercel.app/modules/gateways/callback/paymegate.php</p>
+        <p className="mt-2 text-xs leading-5 text-white/55">Checkout stays disabled until the PayMeGate API key and webhook signing secret are configured on the server. Payments are credited only after a valid signed confirmation.</p>
+        <p className="mt-3 text-xs text-white/45">Configure this exact HTTPS webhook URL in PayMeGate:</p>
+        <p className="mt-2 break-all font-mono text-[11px] text-amber-100/65">https://build-fizz-casino-app.vercel.app/api/webhooks/paymegate</p>
       </div>
     )
   }

@@ -11,13 +11,16 @@ const eventSchema = z.object({
 
 const paidOrderSchema = eventSchema.extend({
   type: z.literal('order.paid'),
+  createdAt: z.string().datetime(),
   orderUUID: z.string().uuid(),
-  transactionUUID: z.string().uuid(),
+  transactionUUID: z.string().uuid().optional(),
+  transactionRef: z.string().nullable().optional(),
   status: z.literal('PAID'),
-  amount: z.string().regex(/^\d+(?:\.\d{1,2})?$/),
+  amount: z.string().max(16).regex(/^\d+(?:\.\d{1,2})?$/),
   currency: z.string().regex(/^[A-Z]{3}$/),
-  externalId: z.string().min(1).max(128).nullable(),
-  paidAt: z.string().datetime().optional(),
+  customerEmail: z.string().email(),
+  externalId: z.string().uuid().nullable(),
+  paidAt: z.string().datetime(),
 })
 
 const MAX_WEBHOOK_BYTES = 65_536
@@ -26,11 +29,11 @@ const MAX_TIMESTAMP_AGE_MS = 5 * 60_000
 function parseCents(value: string) {
   const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value)
   if (!match) return null
-  return BigInt(match[1]) * 100n + BigInt((match[2] ?? '').padEnd(2, '0'))
+  return BigInt(match[1]) * BigInt(100) + BigInt((match[2] ?? '').padEnd(2, '0'))
 }
 
 function formatCents(cents: bigint) {
-  return `${cents / 100n}.${String(cents % 100n).padStart(2, '0')}`
+  return `${cents / BigInt(100)}.${String(cents % BigInt(100)).padStart(2, '0')}`
 }
 
 function markEventProcessed(client: import('pg').PoolClient, eventId: string) {
@@ -131,8 +134,9 @@ export async function POST(request: Request) {
       if (!paidEvent?.success) return
 
       const event = paidEvent.data
-      if (!event.externalId) {
+      if (!event.externalId || !event.transactionUUID) {
         await markEventProcessed(client, webhookEventId)
+        console.warn('[v0] PayMeGate event lacked a verified transaction or deposit reference.')
         return
       }
 
@@ -163,8 +167,7 @@ export async function POST(request: Request) {
         event.orderUUID !== deposit.provider_order_id ||
         !['pending', 'processing'].includes(deposit.status)
       ) {
-        if (deposit?.status === 'paid') await markEventProcessed(client, webhookEventId)
-        else await markEventProcessed(client, webhookEventId)
+        await markEventProcessed(client, webhookEventId)
         console.warn('[v0] PayMeGate paid event did not match an eligible pending deposit.')
         return
       }
