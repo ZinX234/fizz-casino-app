@@ -23,7 +23,7 @@ const payMeGateOrderSchema = z.object({
 const MIN_DEPOSIT_CENTS = 200
 const MAX_DEPOSIT_CENTS = 1_000_000
 const CHECKOUT_EXPIRY_MINUTES = 30
-const APP_ORIGIN_FALLBACK = 'https://build-fizz-casino-app.vercel.app'
+const APP_ORIGIN = 'https://v0-playfizz.vercel.app'
 
 class DepositPolicyError extends Error {
   constructor(message: string, readonly status: number) {
@@ -42,11 +42,7 @@ function formatCents(cents: bigint) {
 }
 
 function getBackUrl() {
-  const configuredOrigin = process.env.VERCEL_PROJECT_PRODUCTION_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-    : APP_ORIGIN_FALLBACK
-  const origin = new URL(configuredOrigin).origin
-  return `${origin}/account?deposit=returned`
+  return `${APP_ORIGIN}/account?deposit=returned`
 }
 
 function isTrustedCheckoutUrl(value: string) {

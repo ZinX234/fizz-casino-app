@@ -50,7 +50,7 @@ export function DepositForm({ enabled, currency }: { enabled: boolean; currency:
         <p className="text-sm font-semibold text-white/80">Secure deposits are not configured yet.</p>
         <p className="mt-2 text-xs leading-5 text-white/55">Checkout stays disabled until the PayMeGate API key and webhook signing secret are configured on the server. Payments are credited only after a valid signed confirmation.</p>
         <p className="mt-3 text-xs text-white/45">Configure this exact HTTPS webhook URL in PayMeGate:</p>
-        <p className="mt-2 break-all font-mono text-[11px] text-amber-100/65">https://build-fizz-casino-app.vercel.app/api/webhooks/paymegate</p>
+        <p className="mt-2 break-all font-mono text-[11px] text-amber-100/65">https://v0-playfizz.vercel.app/api/webhooks/paymegate</p>
       </div>
     )
   }

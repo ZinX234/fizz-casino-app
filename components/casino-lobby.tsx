@@ -418,7 +418,16 @@ export function CasinoLobby({ games, dataError, currentPlayer }: Props) {
     <div className="min-h-screen bg-[#090a0d] text-white">
       <LobbyRail />
       <LobbyHeader currentPlayer={currentPlayer} onOpenChat={() => setChatOpen(true)} chatPinned={chatDocked} />
-      <main className={`md:ml-[60px] ${chatDocked ? 'md:mr-[320px]' : ''}`}>
+      <main
+        className={`md:ml-[60px] ${chatDocked ? 'md:mr-[320px]' : ''}`}
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(9, 10, 13, 0.52), rgba(9, 10, 13, 0.64)), url("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-fXGlmWR4xl0HrAiCfi882vMVrnx8Qx.png")',
+          backgroundPosition: 'center top',
+          backgroundSize: 'cover',
+          backgroundAttachment: 'fixed',
+        }}
+      >
         <div className="mx-auto flex max-w-[1280px] flex-col gap-4 px-3 pb-24 pt-5 sm:gap-5 sm:px-5 sm:pt-6">
           <SpotlightRow games={games} currentPlayer={currentPlayer} />
           <GameShelf games={games} dataError={dataError} currentPlayer={currentPlayer} />
