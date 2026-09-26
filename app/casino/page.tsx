@@ -1,6 +1,7 @@
 import { CasinoLobby } from '@/components/casino-lobby'
 import { auth } from '@/lib/auth/server'
 import { getAvailableGames, getProgressionSnapshot, getWalletSnapshot, type GameRecord } from '@/lib/casino-data'
+import { getKickLiveStatus } from '@/lib/kick-status'
 import type { PlayerProgression } from '@/lib/progression'
 
 export const dynamic = 'force-dynamic'
@@ -10,11 +11,18 @@ export default async function CasinoPage() {
   const { data: session } = await auth.getSession()
   let games: GameRecord[] = []
   let dataError = false
+  let kickIsLive = false
   try {
     games = await getAvailableGames()
   } catch (error) {
     dataError = true
     console.error('[v0] Casino catalog unavailable:', error instanceof Error ? error.message : 'unknown error')
+  }
+
+  try {
+    kickIsLive = await getKickLiveStatus()
+  } catch (error) {
+    console.error('[v0] Kick status unavailable:', error instanceof Error ? error.message : 'unknown error')
   }
 
   let currentPlayer: { id: string; name: string; email: string; balance: string | null; currency: string | null; progression: PlayerProgression } | null = null
@@ -45,5 +53,5 @@ export default async function CasinoPage() {
     }
   }
 
-  return <CasinoLobby games={games} dataError={dataError} currentPlayer={currentPlayer} />
+  return <CasinoLobby games={games} dataError={dataError} currentPlayer={currentPlayer} kickIsLive={kickIsLive} />
 }

@@ -44,6 +44,7 @@ type Props = {
   games: GameRecord[]
   dataError: boolean
   currentPlayer: LobbyPlayer | null
+  kickIsLive: boolean
 }
 
 type LobbyMessage = {
@@ -150,7 +151,20 @@ function LobbyHeader({ currentPlayer, onOpenChat, chatPinned }: { currentPlayer:
   )
 }
 
-function KickChannelBanner({ chatPinned }: { chatPinned: boolean }) {
+const kickStatusFetcher = async (url: string): Promise<{ isLive: boolean }> => {
+  const response = await fetch(url, { cache: 'no-store' })
+  if (!response.ok) throw new Error('Kick status could not be refreshed.')
+  return response.json()
+}
+
+function KickChannelBanner({ chatPinned, initialIsLive }: { chatPinned: boolean; initialIsLive: boolean }) {
+  const { data } = useSWR('/api/kick-status', kickStatusFetcher, {
+    fallbackData: { isLive: initialIsLive },
+    refreshInterval: 15_000,
+    revalidateOnFocus: true,
+  })
+  const isLive = data?.isLive ?? initialIsLive
+
   return (
     <div className={`px-3 pt-3 sm:px-5 md:ml-[60px] ${chatPinned ? 'md:mr-[320px]' : ''}`}>
       <a
@@ -160,9 +174,15 @@ function KickChannelBanner({ chatPinned }: { chatPinned: boolean }) {
         aria-label="Visit my Kick channel at kick.com/zinx14"
         className="mx-auto flex max-w-[1280px] flex-col gap-2 rounded-xl border border-[#53fc18]/25 bg-[#53fc18]/[0.06] px-4 py-3 transition hover:border-[#53fc18]/50 hover:bg-[#53fc18]/[0.09] sm:flex-row sm:items-center sm:justify-between sm:px-5"
       >
-        <span className="flex flex-col gap-0.5">
-          <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#8aff65]">My Kick channel</span>
-          <span className="text-sm font-semibold text-white">Find me at <span className="text-[#a3ff83]">kick.com/zinx14</span></span>
+        <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#8aff65]">My Kick channel</span>
+            <span className="text-sm font-semibold text-white">Find me at <span className="text-[#a3ff83]">kick.com/zinx14</span></span>
+          </span>
+          <span className={`inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.12em] ${isLive ? 'border-red-300/20 bg-red-400/10 text-red-100' : 'border-white/10 bg-white/[0.04] text-white/50'}`}>
+            <span aria-hidden="true" className={`size-1.5 rounded-full ${isLive ? 'animate-pulse bg-red-400' : 'bg-white/35'}`} />
+            {isLive ? 'Live now' : 'Not live right now'}
+          </span>
         </span>
         <span className="inline-flex min-h-9 items-center justify-center gap-2 self-start rounded-lg bg-[#53fc18] px-3.5 text-xs font-extrabold text-[#10140d] transition hover:bg-[#76ff49] sm:self-auto">
           Visit Kick <ChevronRight aria-hidden="true" className="size-4" />
@@ -435,7 +455,7 @@ function LobbyChat({ currentPlayer, open, pinned, onClose, onTogglePin }: { curr
   )
 }
 
-export function CasinoLobby({ games, dataError, currentPlayer }: Props) {
+export function CasinoLobby({ games, dataError, currentPlayer, kickIsLive }: Props) {
   const [chatOpen, setChatOpen] = useState(false)
   const [chatPinned, setChatPinned] = useState(false)
   const chatDocked = chatOpen && chatPinned
@@ -444,7 +464,7 @@ export function CasinoLobby({ games, dataError, currentPlayer }: Props) {
     <div className="min-h-screen bg-[#090a0d] text-white">
       <LobbyRail />
       <LobbyHeader currentPlayer={currentPlayer} onOpenChat={() => setChatOpen(true)} chatPinned={chatDocked} />
-      <KickChannelBanner chatPinned={chatDocked} />
+      <KickChannelBanner chatPinned={chatDocked} initialIsLive={kickIsLive} />
       <main
         className={`md:ml-[60px] ${chatDocked ? 'md:mr-[320px]' : ''}`}
         style={{
