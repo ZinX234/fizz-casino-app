@@ -161,21 +161,14 @@ export async function getVaultHeistLeaderboard() {
 
 export async function getCasinoAdminAccess(userId: string, sessionEmail: string | null | undefined) {
   if (!sessionEmail || sessionEmail.trim().toLowerCase() !== OWNER_EMAIL) {
-    return { authorized: false, needsVerification: false }
+    return { authorized: false }
   }
-
-  const { rows: users } = await databasePool.query<{ email_verified: boolean }>(
-    `SELECT "emailVerified" AS email_verified FROM neon_auth."user"
-     WHERE id = $1 AND lower(email) = lower($2) LIMIT 1`,
-    [userId, OWNER_EMAIL],
-  )
-  if (!users[0]?.email_verified) return { authorized: false, needsVerification: true }
 
   return withTransaction(async (client) => {
     const { rows: inserted } = await client.query<{ user_id: string }>(
       `INSERT INTO public.user_roles (user_id, role_id, granted_by)
        SELECT u.id, 'admin', u.id FROM neon_auth."user" u
-       WHERE u.id = $1 AND lower(u.email) = lower($2) AND u."emailVerified" = true
+       WHERE u.id = $1 AND lower(u.email) = lower($2)
          AND EXISTS (SELECT 1 FROM public.roles WHERE id = 'admin')
        ON CONFLICT (user_id, role_id) DO NOTHING
        RETURNING user_id::text`,
@@ -196,11 +189,10 @@ export async function getCasinoAdminAccess(userId: string, sessionEmail: string 
          JOIN public.roles r ON r.id = ur.role_id
          JOIN neon_auth."user" u ON u.id = ur.user_id
          WHERE ur.user_id = $1 AND ur.role_id = 'admin' AND lower(u.email) = lower($2)
-           AND u."emailVerified" = true
        ) AS authorized`,
       [userId, OWNER_EMAIL],
     )
-    return { authorized: rows[0]?.authorized === true, needsVerification: false }
+    return { authorized: rows[0]?.authorized === true }
   })
 }
 

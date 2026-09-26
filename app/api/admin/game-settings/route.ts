@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   try {
     const access = await getCasinoAdminAccess(session.user.id, session.user.email)
     if (!access.authorized) {
-      return Response.json({ error: access.needsVerification ? 'Verify the account email before using admin controls.' : 'Administrator access is restricted.' }, { status: 403 })
+      return Response.json({ error: 'Administrator access is restricted.' }, { status: 403 })
     }
     const body = updateSchema.safeParse(await request.json())
     if (!body.success || !supportedGameSlug(body.data?.slug ?? '')) {

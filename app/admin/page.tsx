@@ -16,9 +16,7 @@ export default async function AdminPage() {
   if (!session?.user) redirect('/auth/sign-in')
   const adminAccess = await getCasinoAdminAccess(session.user.id, session.user.email)
   if (!adminAccess.authorized) {
-    const message = adminAccess.needsVerification
-      ? 'Verify the email address on this account before administrator controls can be enabled.'
-      : 'This account is not authorized to access the administration dashboard.'
+    const message = 'This account is not authorized to access the administration dashboard.'
     return <div className="min-h-screen bg-[#0b0c10] text-white"><CasinoHeaderForAccount /><main className="mx-auto max-w-3xl px-5 py-20"><div className="rounded-3xl border border-white/10 bg-[#12141a] p-8 text-center"><CircleHelp aria-hidden="true" className="mx-auto size-7 text-white/45" /><h1 className="mt-5 text-xl font-bold">Administrator access is unavailable.</h1><p className="mt-3 text-sm leading-6 text-white/45">{message}</p></div></main></div>
   }
 

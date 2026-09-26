@@ -117,7 +117,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    if (action === 'settle_rains') {
+    if (body.action === 'settle_rains') {
       const settledCount = await settleExpiredRains()
       return Response.json({ settledCount })
     }
@@ -142,12 +142,6 @@ export async function POST(request: Request) {
         )
         const wallet = wallets[0]
         if (!wallet) throw apiError('Set up your wallet before starting a rain pool.', 409)
-        const { rows: retryRain } = await client.query<{ id: string; amount: string; closes_at: Date; duration_seconds: number }>(
-          `SELECT id::text, amount::text, closes_at, duration_seconds FROM public.lobby_rains
-           WHERE host_user_id = $1::uuid AND idempotency_key = $2 LIMIT 1`,
-          [session.user.id, body.requestId],
-        )
-        if (retryRain[0]) return retryRain[0]
         const { rows: activeRains } = await client.query<{ id: string }>(
           `SELECT id::text FROM public.lobby_rains WHERE status = 'active' AND closes_at > now() LIMIT 1`,
         )
