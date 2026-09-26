@@ -178,8 +178,8 @@ export async function getCasinoAdminAccess(userId: string, sessionEmail: string 
     if (inserted[0]) {
       await client.query(
         `INSERT INTO public.audit_logs (actor_user_id, action, entity_type, entity_id, details)
-         VALUES ($1, 'admin.role.bootstrapped', 'user', $1::text, jsonb_build_object('email', $2))`,
-        [userId, OWNER_EMAIL],
+         VALUES ($1::uuid, 'admin.role.bootstrapped', 'user', $3::text, jsonb_build_object('email', $2::text))`,
+        [userId, OWNER_EMAIL, userId],
       )
     }
 
