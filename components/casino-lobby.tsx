@@ -150,6 +150,28 @@ function LobbyHeader({ currentPlayer, onOpenChat, chatPinned }: { currentPlayer:
   )
 }
 
+function KickChannelBanner({ chatPinned }: { chatPinned: boolean }) {
+  return (
+    <div className={`px-3 pt-3 sm:px-5 md:ml-[60px] ${chatPinned ? 'md:mr-[320px]' : ''}`}>
+      <a
+        href="https://kick.com/zinx14"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Visit my Kick channel at kick.com/zinx14"
+        className="mx-auto flex max-w-[1280px] flex-col gap-2 rounded-xl border border-[#53fc18]/25 bg-[#53fc18]/[0.06] px-4 py-3 transition hover:border-[#53fc18]/50 hover:bg-[#53fc18]/[0.09] sm:flex-row sm:items-center sm:justify-between sm:px-5"
+      >
+        <span className="flex flex-col gap-0.5">
+          <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#8aff65]">My Kick channel</span>
+          <span className="text-sm font-semibold text-white">Find me at <span className="text-[#a3ff83]">kick.com/zinx14</span></span>
+        </span>
+        <span className="inline-flex min-h-9 items-center justify-center gap-2 self-start rounded-lg bg-[#53fc18] px-3.5 text-xs font-extrabold text-[#10140d] transition hover:bg-[#76ff49] sm:self-auto">
+          Visit Kick <ChevronRight aria-hidden="true" className="size-4" />
+        </span>
+      </a>
+    </div>
+  )
+}
+
 function ProgressCard({ player }: { player: LobbyPlayer | null }) {
   if (!player) {
     return (
@@ -198,7 +220,6 @@ function SpotlightRow({ games, currentPlayer }: { games: GameRecord[]; currentPl
           <Link key={game.id} href={currentPlayer ? `/games/${game.slug}` : `/auth/sign-in?returnTo=/games/${game.slug}`} aria-label={`${currentPlayer ? 'Open' : 'Sign in to play'} ${game.name}`} className="group relative isolate flex min-h-[184px] overflow-hidden rounded-lg bg-[#16171c] sm:min-h-[218px]">
             <img src={gameArtwork[game.slug]} alt="" className="absolute inset-0 -z-20 size-full object-cover transition duration-500 group-hover:scale-[1.04]" />
             <div className="absolute inset-0 -z-10 bg-gradient-to-r from-black/85 via-black/40 to-black/5" />
-            {game.slug === 'crash' && <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full border border-red-300/20 bg-[#120c11]/85 px-2.5 py-1.5 text-[8px] font-extrabold uppercase tracking-[0.12em] text-white"><span aria-hidden="true" className="size-1.5 rounded-full bg-red-400 shadow-[0_0_8px_rgba(248,113,113,.85)]" />Live on Kick</span>}
             <div className="flex max-w-[76%] flex-col justify-center px-4 py-4 sm:px-5">
               <span className="mb-2 w-fit rounded-sm bg-white/90 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-[#25232b]">{spotlight.eyebrow}</span>
               <h2 className="text-[18px] font-black uppercase leading-[1.04] tracking-[-0.03em] text-white sm:text-[20px]">{spotlight.title}</h2>
@@ -238,7 +259,6 @@ function GameCard({ game, currentPlayer, canPlay }: { game: GameRecord; currentP
           <h3 className="truncate text-[20px] font-black uppercase leading-none tracking-[-0.05em] text-white [text-shadow:0_2px_8px_rgba(0,0,0,.7)]">{game.name}</h3>
           <p className="mt-1 truncate text-[9px] font-medium text-white/65">{game.category}</p>
         </div>
-        {game.slug === 'crash' && <span className="absolute right-2 top-6 inline-flex items-center gap-1 rounded-full border border-red-300/20 bg-[#120c11]/85 px-2 py-1 text-[7px] font-extrabold uppercase tracking-[0.08em] text-white"><span aria-hidden="true" className="size-1 rounded-full bg-red-400" />Live on Kick</span>}
         {canPlay && <span className="absolute right-2 top-12 rounded-full border border-white/20 bg-black/35 px-2 py-1 text-[8px] font-bold text-white/85">PLAY</span>}
       </div>
       <div className="flex min-h-[43px] items-center justify-between gap-2 px-2.5">
@@ -424,6 +444,7 @@ export function CasinoLobby({ games, dataError, currentPlayer }: Props) {
     <div className="min-h-screen bg-[#090a0d] text-white">
       <LobbyRail />
       <LobbyHeader currentPlayer={currentPlayer} onOpenChat={() => setChatOpen(true)} chatPinned={chatDocked} />
+      <KickChannelBanner chatPinned={chatDocked} />
       <main
         className={`md:ml-[60px] ${chatDocked ? 'md:mr-[320px]' : ''}`}
         style={{
