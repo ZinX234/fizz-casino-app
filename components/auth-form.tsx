@@ -58,6 +58,21 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
         return
       }
 
+      if (isSignUp) {
+        let verificationStatus: 'sent' | 'failed' = 'failed'
+        try {
+          const verification = await authClient.emailOtp.sendVerificationOtp({
+            email: email.trim(),
+            type: 'email-verification',
+          })
+          if (!verification.error) verificationStatus = 'sent'
+        } catch {
+          verificationStatus = 'failed'
+        }
+        window.location.replace(`/account?verification=${verificationStatus}`)
+        return
+      }
+
       window.location.replace('/account')
     } catch (authError) {
       setError(getAuthErrorMessage(authError, isSignUp))

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { ArrowDownLeft, ArrowUpRight, BadgeCheck, Clock3, CreditCard, ShieldCheck, Trophy, Wallet } from 'lucide-react'
 import { AccountNavigation, CasinoHeaderForAccount, CasinoPageHeader, EmptyDataState } from '@/components/casino-home'
 import DepositForm from './deposit-form'
+import { EmailVerificationCard } from '@/components/email-verification-card'
 import { formatFizzcoins } from '@/lib/format-money'
 import { auth } from '@/lib/auth/server'
 import { getAccountSnapshot } from '@/lib/casino-data'
@@ -10,7 +11,7 @@ import { getAccountSnapshot } from '@/lib/casino-data'
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'My account | Fizz Casino' }
 
-export default async function AccountPage({ searchParams }: { searchParams: Promise<{ deposit?: string | string[] }> }) {
+export default async function AccountPage({ searchParams }: { searchParams: Promise<{ deposit?: string | string[]; verification?: string | string[] }> }) {
   const query = await searchParams
   const { data: session } = await auth.getSession()
   if (!session?.user) redirect('/auth/sign-in')
@@ -25,6 +26,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   return <div className="min-h-screen bg-[#0b0c10] text-white"><CasinoHeaderForAccount /><main className="mx-auto max-w-7xl px-5 py-9 sm:px-8 sm:py-14"><CasinoPageHeader eyebrow="Your Fizz account" title="Account overview" detail="Your real wallet, account activity, bonuses and responsible gaming settings." /><AccountNavigation active="overview" />
     {query.deposit === 'returned' && <p role="status" className="mb-5 rounded-xl border border-amber-100/10 bg-amber-100/[0.035] px-4 py-3 text-sm text-amber-50/75">You&apos;re back from checkout. Your balance updates only after PayMeGate confirms the payment.</p>}
     {!account ? <div role="alert" className="rounded-2xl border border-rose-200/10 bg-rose-100/[0.035] p-5 text-sm text-rose-100/75">Your account data could not be loaded. No balance or activity has been substituted.</div> : <>
+      {!account.emailVerified && <EmailVerificationCard email={session.user.email ?? ''} initialStatus={query.verification === 'sent' ? 'sent' : query.verification === 'failed' ? 'failed' : null} />}
       <section aria-label="Account summary" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
         <div className="rounded-2xl border border-white/[0.08] bg-[#12141a] p-5"><div className="flex items-center gap-2 text-xs font-semibold text-white/45"><Wallet aria-hidden="true" className="size-4 text-amber-100/70" /> Wallet balance</div><p className="mt-4 text-2xl font-bold tracking-tight text-white">{formatFizzcoins(account.wallet.balance, account.wallet.currency)}</p><Link href="#wallet" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-amber-100/70 hover:text-amber-100">Wallet activity <ArrowDownLeft aria-hidden="true" className="size-3.5" /></Link></div>
         <div className="rounded-2xl border border-white/[0.08] bg-[#12141a] p-5"><div className="flex items-center gap-2 text-xs font-semibold text-white/45"><Clock3 aria-hidden="true" className="size-4 text-white/40" /> Recent bets</div><p className="mt-4 text-2xl font-bold tracking-tight text-white">{account.bets.length}</p><p className="mt-3 text-xs text-white/35">Real records, up to 20 shown below</p></div>
@@ -34,7 +36,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
       </section>
 
       <section id="wallet" className="mt-7 grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
-        <div className="rounded-2xl border border-white/[0.08] bg-[#12141a] p-5 sm:p-6"><div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.035]"><CreditCard aria-hidden="true" className="size-4 text-white/55" /></div><div><h2 className="text-sm font-bold text-white">Wallet actions</h2><p className="mt-1 text-xs text-white/40">Secure PayMeGate deposits</p></div></div><DepositForm enabled={Boolean(process.env.PAYMEGATE_API_KEY?.trim() && process.env.PAYMEGATE_WEBHOOK_SECRET?.trim())} currency={account.wallet.currency} /><p className="mt-4 text-xs leading-5 text-white/45">Withdrawals remain disabled until a separate verified payout flow is configured. Only verified server-side payments and recorded game results can change your balance.</p></div>
+        <div className="rounded-2xl border border-white/[0.08] bg-[#12141a] p-5 sm:p-6"><div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.035]"><CreditCard aria-hidden="true" className="size-4 text-white/55" /></div><div><h2 className="text-sm font-bold text-white">Wallet actions</h2><p className="mt-1 text-xs text-white/40">Secure PayMeGate deposits</p></div></div><DepositForm enabled={Boolean(process.env.PAYMEGATE_API_KEY?.trim() && process.env.PAYMEGATE_WEBHOOK_SECRET?.trim())} currency={account.wallet.currency} emailVerified={account.emailVerified} /><p className="mt-4 text-xs leading-5 text-white/45">Withdrawals remain disabled until a separate verified payout flow is configured. Only verified server-side payments and recorded game results can change your balance.</p></div>
         <div className="rounded-2xl border border-white/[0.08] bg-[#12141a] p-5 sm:p-6"><div className="mb-5 flex items-center justify-between"><div><h2 className="text-sm font-bold text-white">Recent transactions</h2><p className="mt-1 text-xs text-white/40">Immutable wallet ledger entries</p></div></div>{account.transactions.length ? <div className="overflow-x-auto"><table className="w-full min-w-[480px] text-left text-xs"><thead className="text-white/35"><tr><th className="pb-3 font-medium">Type</th><th className="pb-3 font-medium">Description</th><th className="pb-3 text-right font-medium">Amount</th><th className="pb-3 pl-4 font-medium">Date</th></tr></thead><tbody>{account.transactions.map((transaction: any) => <tr key={transaction.id} className="border-t border-white/[0.06]"><td className="py-3 capitalize text-white/75">{transaction.type.replaceAll('_', ' ')}</td><td className="max-w-40 truncate py-3 text-white/45">{transaction.description || '—'}</td><td className="py-3 text-right font-semibold text-white">{formatFizzcoins(transaction.amount, account!.wallet.currency)}</td><td className="py-3 pl-4 text-white/40">{new Date(transaction.created_at).toLocaleDateString()}</td></tr>)}</tbody></table></div> : <EmptyDataState title="No transactions yet." detail="Verified wallet activity will appear here." />}</div>
       </section>
 

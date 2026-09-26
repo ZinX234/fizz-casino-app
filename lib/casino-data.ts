@@ -65,7 +65,7 @@ export async function getWalletSnapshot(userId: string) {
 
 export async function getAccountSnapshot(userId: string) {
   const wallet = await getWalletSnapshot(userId)
-  const [transactions, bets, bonuses, vip, limits, progression] = await Promise.all([
+  const [transactions, bets, bonuses, vip, limits, progression, emailVerification] = await Promise.all([
     databasePool.query(
       `SELECT wt.id::text, wt.type, wt.amount::text, wt.description, wt.created_at,
               w.currency
@@ -98,8 +98,12 @@ export async function getAccountSnapshot(userId: string) {
        ORDER BY created_at DESC`, [userId],
     ),
     getProgressionSnapshot(userId),
+    databasePool.query<{ email_verified: boolean }>(
+      `SELECT "emailVerified" AS email_verified FROM neon_auth."user" WHERE id = $1::uuid`,
+      [userId],
+    ),
   ])
-  return { wallet, transactions: transactions.rows, bets: bets.rows, bonuses: bonuses.rows, vip: vip.rows[0] ?? null, limits: limits.rows, progression }
+  return { wallet, transactions: transactions.rows, bets: bets.rows, bonuses: bonuses.rows, vip: vip.rows[0] ?? null, limits: limits.rows, progression, emailVerified: emailVerification.rows[0]?.email_verified === true }
 }
 
 export async function getAdminCounts() {
