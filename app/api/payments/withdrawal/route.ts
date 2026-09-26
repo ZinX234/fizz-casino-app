@@ -1,12 +1,11 @@
 import { z } from 'zod'
 import { auth } from '@/lib/auth/server'
-import { consumeUserRateLimit, withTransaction } from '@/lib/db'
+import { consumeUserRateLimit, databasePool, withTransaction } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 import { encryptPayoutDestination } from '@/lib/payout-details'
 
 const withdrawalSchema = z.object({
   amount: z.string().trim().max(8).regex(/^\d{1,5}(?:\.\d{1,2})?$/),
-  paypalEmail: z.string().trim().email().max(254),
   requestId: z.string().uuid(),
 }).strict()
 
@@ -44,13 +43,26 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Enter a PayPal withdrawal amount between $10.00 and $10,000.00.' }, { status: 400 })
   }
 
+  let paypalEmail: string | null = null
+  try {
+    const { rows: profiles } = await databasePool.query<{ paypal_email: string }>(
+      `SELECT paypal_email FROM public.user_profiles WHERE user_id = $1::uuid LIMIT 1`,
+      [session.user.id],
+    )
+    paypalEmail = profiles[0]?.paypal_email ?? null
+  } catch (error) {
+    console.error('[v0] Withdrawal profile lookup failed:', error instanceof Error ? error.message : 'unknown error')
+    return Response.json({ error: 'Your profile could not be loaded. Please try again.' }, { status: 503 })
+  }
+  if (!paypalEmail) return Response.json({ error: 'Complete your PayPal details in Profile settings before requesting a withdrawal.' }, { status: 409 })
+
   if (!(await consumeUserRateLimit(session.user.id, 'withdrawal-create', 5, 3600))) {
     return Response.json({ error: 'Please wait before submitting another withdrawal.' }, { status: 429 })
   }
 
   let encryptedDestination: string
   try {
-    encryptedDestination = encryptPayoutDestination(parsed.data.paypalEmail)
+    encryptedDestination = encryptPayoutDestination(paypalEmail)
   } catch {
     return Response.json({ error: 'Secure payout storage is not configured.' }, { status: 503 })
   }
@@ -89,7 +101,7 @@ export async function POST(request: Request) {
            user_id, wallet_id, amount, currency, method, destination_token, status, idempotency_key
          ) VALUES ($1::uuid, $2::uuid, $3::numeric, $4, 'paypal', $5, 'pending', $6)
          RETURNING id::text, amount::text, currency, method, status, created_at`,
-          [session.user.id, wallet.id, formatCents(amountCents), wallet.currency, encryptedDestination, parsed.data.requestId],
+        [session.user.id, wallet.id, formatCents(amountCents), wallet.currency, encryptedDestination, parsed.data.requestId],
       )
       const created = rows[0]
       if (!created) throw new Error('Withdrawal request could not be created')

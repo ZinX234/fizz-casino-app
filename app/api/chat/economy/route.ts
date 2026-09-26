@@ -200,6 +200,11 @@ export async function POST(request: Request) {
     if (amountCents === null || amountCents < BigInt(100) || amountCents > BigInt(10_000)) {
       return Response.json({ error: 'Tips must be between $1.00 and $100.00.' }, { status: 400 })
     }
+    const { rows: senderProfiles } = await databasePool.query<{ username: string }>(
+      `SELECT username FROM public.user_profiles WHERE user_id = $1::uuid LIMIT 1`,
+      [session.user.id],
+    )
+    const senderName = senderProfiles[0]?.username ?? session.user.name ?? 'Player'
     const tip = await withTransaction(async (client) => {
       const { rows: previous } = await client.query<{ id: string; amount: string }>(
         `SELECT id::text, amount::text FROM public.player_tips
@@ -209,9 +214,12 @@ export async function POST(request: Request) {
       if (previous[0]) return { id: previous[0].id, amount: previous[0].amount, reused: true }
 
       const { rows: recipients } = await client.query<{ id: string; name: string }>(
-        `SELECT id::text, name FROM neon_auth."user"
-         WHERE lower(btrim(name)) = lower($1) AND id <> $2::uuid AND banned IS NOT TRUE
-         ORDER BY id LIMIT 2`,
+        `SELECT u.id::text, coalesce(p.username, u.name) AS name
+         FROM neon_auth."user" u
+         LEFT JOIN public.user_profiles p ON p.user_id = u.id
+         WHERE lower(btrim(coalesce(p.username, u.name))) = lower($1)
+           AND u.id <> $2::uuid AND u.banned IS NOT TRUE
+         ORDER BY u.id LIMIT 2`,
         [body.recipientName, session.user.id],
       )
       if (recipients.length !== 1) throw apiError(recipients.length ? 'That display name is ambiguous; ask the player to choose a unique name.' : 'No player has that display name.', 404)
@@ -259,7 +267,7 @@ export async function POST(request: Request) {
         `INSERT INTO public.wallet_transactions (
            wallet_id, user_id, type, amount, balance_before, balance_after, reference_type, reference_id, idempotency_key, description
          ) VALUES ($1::uuid, $2::uuid, 'tip', $3::numeric, $4::numeric, $5::numeric, 'tip', $6::uuid, $7, $8)`,
-        [recipientWallet.id, recipient.id, formatCents(amountCents), recipientWallet.balance, formatCents(recipientBalance + amountCents), tipId, `tip:${tipId}:recipient`, `Tip from ${session.user.name || 'Player'}`],
+        [recipientWallet.id, recipient.id, formatCents(amountCents), recipientWallet.balance, formatCents(recipientBalance + amountCents), tipId, `tip:${tipId}:recipient`, `Tip from ${senderName}`],
       )
       return { id: tipId, amount: formatCents(amountCents), reused: false }
     })

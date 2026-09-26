@@ -1,6 +1,7 @@
 import { CasinoLobby } from '@/components/casino-lobby'
 import { auth } from '@/lib/auth/server'
 import { getAvailableGames, getProgressionSnapshot, getWalletSnapshot, type GameRecord } from '@/lib/casino-data'
+import { getPlayerUsername } from '@/lib/player-profile'
 import { getKickLiveStatus } from '@/lib/kick-status'
 import type { PlayerProgression } from '@/lib/progression'
 
@@ -28,13 +29,14 @@ export default async function CasinoPage() {
   let currentPlayer: { id: string; name: string; email: string; balance: string | null; currency: string | null; progression: PlayerProgression } | null = null
   if (session?.user) {
     try {
-      const [wallet, progression] = await Promise.all([
+      const [wallet, progression, username] = await Promise.all([
         getWalletSnapshot(session.user.id),
         getProgressionSnapshot(session.user.id),
+        getPlayerUsername(session.user.id),
       ])
       currentPlayer = {
         id: session.user.id,
-        name: session.user.name || '',
+        name: username || session.user.name || '',
         email: session.user.email || '',
         balance: wallet.balance,
         currency: wallet.currency,

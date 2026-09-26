@@ -14,13 +14,14 @@ export async function GET() {
       body: string
       createdAt: Date
     }>(
-      `SELECT id::text,
-              'Player ' || upper(substr(replace(sender_user_id::text, '-', ''), 1, 4)) AS "senderName",
-              body,
-              created_at AS "createdAt"
-       FROM public.lobby_chat_messages
-       WHERE created_at > now() - interval '30 days'
-       ORDER BY created_at DESC, id DESC
+       `SELECT m.id::text,
+              coalesce(p.username, 'Player ' || upper(substr(replace(m.sender_user_id::text, '-', ''), 1, 4))) AS "senderName",
+              m.body,
+              m.created_at AS "createdAt"
+       FROM public.lobby_chat_messages m
+       LEFT JOIN public.user_profiles p ON p.user_id = m.sender_user_id
+       WHERE m.created_at > now() - interval '30 days'
+       ORDER BY m.created_at DESC, m.id DESC
        LIMIT $1`,
       [MAX_MESSAGES],
     )
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
        VALUES ($1::uuid, $2)
        RETURNING id::text,
                  sender_user_id::text AS "senderId",
-                 'Player ' || upper(substr(replace(sender_user_id::text, '-', ''), 1, 4)) AS "senderName",
+                 coalesce((SELECT username FROM public.user_profiles WHERE user_id = $1::uuid), 'Player ' || upper(substr(replace(sender_user_id::text, '-', ''), 1, 4))) AS "senderName",
                  body,
                  created_at AS "createdAt"`,
       [session.user.id, parsed.data.message],

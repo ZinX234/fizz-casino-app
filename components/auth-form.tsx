@@ -38,7 +38,10 @@ function getAuthErrorMessage(error: unknown, isSignUp: boolean) {
 }
 
 export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
-  const [name, setName] = useState('')
+  const [username, setUsername] = useState('')
+  const [paypalFirstName, setPaypalFirstName] = useState('')
+  const [paypalLastName, setPaypalLastName] = useState('')
+  const [paypalEmail, setPaypalEmail] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -51,7 +54,7 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
     setPending(true)
     try {
       const result = isSignUp
-        ? await authClient.signUp.email({ email: email.trim(), password, name: name.trim() })
+        ? await authClient.signUp.email({ email: email.trim(), password, name: username.trim() })
         : await authClient.signIn.email({ email: email.trim(), password })
       if (result.error) {
         setError(getAuthErrorMessage(result.error, isSignUp))
@@ -59,6 +62,17 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
       }
 
       if (isSignUp) {
+        const profileResponse = await fetch('/api/account/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, paypalFirstName, paypalLastName, paypalEmail }),
+        })
+        const profileResult = await profileResponse.json().catch(() => null)
+        if (!profileResponse.ok) {
+          setError(profileResult?.error ?? 'Your account was created, but the required profile could not be saved. Sign in and complete it from Profile settings.')
+          return
+        }
+
         let verificationStatus: 'sent' | 'failed' = 'failed'
         try {
           const verification = await authClient.emailOtp.sendVerificationOtp({
@@ -88,8 +102,12 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
         <h1 className="mt-3 text-3xl font-bold tracking-tight text-white">{isSignUp ? 'Create your account' : 'Welcome back.'}</h1>
         <p className="mt-2 text-sm leading-6 text-white/45">{isSignUp ? 'Your Fizz account starts here.' : 'Sign in to view your account and wallet.'}</p>
         <form onSubmit={submit} className="mt-8 flex flex-col gap-4">
-          {isSignUp && <div className="flex flex-col gap-2"><label htmlFor="name" className="text-xs font-semibold text-white/70">Name</label><input id="name" name="name" type="text" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} required minLength={2} maxLength={80} className="form-input" /></div>}
-          <div className="flex flex-col gap-2"><label htmlFor="email" className="text-xs font-semibold text-white/70">Email</label><input id="email" name="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required maxLength={254} className="form-input" /></div>
+          {isSignUp && <>
+            <div className="flex flex-col gap-2"><label htmlFor="username" className="text-xs font-semibold text-white/70">Fizz username</label><input id="username" name="username" type="text" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required minLength={3} maxLength={20} pattern="[A-Za-z0-9_]+" aria-describedby="signup-username-help" className="form-input" /><p id="signup-username-help" className="text-xs leading-5 text-white/40">3–20 letters, numbers, or underscores. This is your public player name.</p></div>
+            <div className="grid grid-cols-2 gap-3"><div className="flex flex-col gap-2"><label htmlFor="paypal-first-name" className="text-xs font-semibold text-white/70">PayPal first name</label><input id="paypal-first-name" name="paypalFirstName" type="text" autoComplete="given-name" value={paypalFirstName} onChange={(event) => setPaypalFirstName(event.target.value)} required maxLength={80} className="form-input" /></div><div className="flex flex-col gap-2"><label htmlFor="paypal-last-name" className="text-xs font-semibold text-white/70">PayPal last name</label><input id="paypal-last-name" name="paypalLastName" type="text" autoComplete="family-name" value={paypalLastName} onChange={(event) => setPaypalLastName(event.target.value)} required maxLength={80} className="form-input" /></div></div>
+            <div className="flex flex-col gap-2"><label htmlFor="paypal-email" className="text-xs font-semibold text-white/70">PayPal email</label><input id="paypal-email" name="paypalEmail" type="email" autoComplete="email" value={paypalEmail} onChange={(event) => setPaypalEmail(event.target.value)} required maxLength={254} className="form-input" /></div>
+          </>}
+          <div className="flex flex-col gap-2"><label htmlFor="email" className="text-xs font-semibold text-white/70">{isSignUp ? 'Fizz email' : 'Email'}</label><input id="email" name="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required maxLength={254} className="form-input" /></div>
           <div className="flex flex-col gap-2"><label htmlFor="password" className="text-xs font-semibold text-white/70">Password</label><input id="password" name="password" type="password" autoComplete={isSignUp ? 'new-password' : 'current-password'} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} maxLength={128} className="form-input" /></div>
           {error && <p role="alert" className="rounded-xl border border-rose-300/15 bg-rose-300/[0.06] px-3 py-2 text-sm text-rose-100/85">{error}</p>}
           <button type="submit" disabled={pending} className="mt-2 inline-flex min-h-12 items-center justify-center rounded-full bg-[#f4bc63] px-5 text-sm font-bold text-[#1a140b] transition hover:bg-[#ffd48d] disabled:cursor-wait disabled:opacity-60">{pending ? 'Please wait…' : isSignUp ? 'Create account' : 'Sign in'}</button>

@@ -263,8 +263,8 @@ export function CasinoHeaderForAccount() {
   return <div className="border-b border-white/[0.07] bg-[#0b0c10]"><div className="mx-auto flex h-[68px] max-w-7xl items-center justify-between px-5 sm:px-8"><Link href="/" className="flex items-center gap-2" aria-label="Fizz Casino home"><img src={fizzLogo} alt="Fizz Casino" className="h-9 w-11 object-contain" /></Link><Link href="/" className="text-sm text-white/55 hover:text-white">Back to lobby <ArrowUpRight aria-hidden="true" className="ml-1 inline size-3.5" /></Link></div></div>
 }
 
-export function AccountNavigation({ active }: { active: 'overview' | 'responsible' | 'support' }) {
-  const items = [{ id: 'overview', href: '/account', label: 'Overview' }, { id: 'responsible', href: '/account/responsible-gaming', label: 'Responsible gaming' }, { id: 'support', href: '/support', label: 'Support' }] as const
+export function AccountNavigation({ active }: { active: 'overview' | 'profile' | 'responsible' | 'support' }) {
+  const items = [{ id: 'overview', href: '/account', label: 'Overview' }, { id: 'profile', href: '/account/profile', label: 'Profile settings' }, { id: 'responsible', href: '/account/responsible-gaming', label: 'Responsible gaming' }, { id: 'support', href: '/support', label: 'Support' }] as const
   return <nav aria-label="Account navigation" className="mb-7 flex gap-2 overflow-x-auto border-b border-white/[0.08] pb-3">{items.map((item) => <Link key={item.id} href={item.href} aria-current={active === item.id ? 'page' : undefined} className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold transition ${active === item.id ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white'}`}>{item.label}</Link>)}</nav>
 }
 

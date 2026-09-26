@@ -1,14 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { auth } from '@/lib/auth/server'
-import { consumeUserRateLimit, withTransaction } from '@/lib/db'
+import { consumeUserRateLimit, databasePool, withTransaction } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 
 const requestSchema = z.object({
   amount: z.string().trim().max(8).regex(/^\d{1,5}(?:\.\d{1,2})?$/),
-  firstName: z.string().trim().min(1).max(80),
-  lastName: z.string().trim().min(1).max(80),
-  paymentEmail: z.string().trim().email().max(254),
   paymentReference: z.string().trim().min(4).max(128).regex(/^[A-Za-z0-9._:-]+$/),
 }).strict()
 
@@ -46,6 +43,21 @@ export async function POST(request: Request) {
   if (!session.user.email || session.user.email.length > 254) {
     return Response.json({ error: 'Your account needs a contact email before requesting a deposit.' }, { status: 400 })
   }
+
+  let profile: { username: string; paypal_first_name: string; paypal_last_name: string; paypal_email: string } | undefined
+  try {
+    const result = await databasePool.query<NonNullable<typeof profile>>(
+      `SELECT username, paypal_first_name, paypal_last_name, paypal_email
+       FROM public.user_profiles WHERE user_id = $1::uuid LIMIT 1`,
+      [session.user.id],
+    )
+    profile = result.rows[0]
+  } catch (error) {
+    console.error('[v0] Manual deposit profile lookup failed:', error instanceof Error ? error.message : 'unknown error')
+    return Response.json({ error: 'Your profile could not be loaded. Please try again.' }, { status: 503 })
+  }
+  if (!profile) return Response.json({ error: 'Complete your Fizz username and PayPal details in Profile settings before requesting a deposit.' }, { status: 409 })
+
   if (!(await consumeUserRateLimit(session.user.id, 'manual-paypal-deposit', 5, 3600))) {
     return Response.json({ error: 'Please wait before submitting another manual deposit request.' }, { status: 429 })
   }
@@ -73,12 +85,11 @@ export async function POST(request: Request) {
       )
       if (!deposits[0]) return null
 
-      const fizzUsername = session.user.name?.trim() || `Player-${session.user.id.slice(0, 4)}`
       await client.query(
         `INSERT INTO public.manual_deposit_requests (
            deposit_id, first_name, last_name, payment_email, fizz_username, fizz_email, status
          ) VALUES ($1::uuid, $2, $3, $4, $5, $6, 'pending')`,
-        [deposits[0].id, parsed.data.firstName, parsed.data.lastName, parsed.data.paymentEmail, fizzUsername, session.user.email],
+        [deposits[0].id, profile!.paypal_first_name, profile!.paypal_last_name, profile!.paypal_email, profile!.username, session.user.email],
       )
       return { id: deposits[0].id, amount, currency: wallet.currency }
     })
