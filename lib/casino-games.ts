@@ -227,9 +227,9 @@ export async function updateBuiltInHouseEdge(actorUserId: string, slug: CasinoGa
       }
       await client.query(
         `INSERT INTO public.audit_logs (actor_user_id, action, entity_type, entity_id, details)
-         VALUES ($1, 'game.rtp.updated', 'game', $2, jsonb_build_object(
-           'game', $3, 'previousHouseEdgeBps', $4, 'houseEdgeBps', $5,
-           'previousRtpBps', $6, 'rtpBps', $7, 'scope', 'all-vault-profiles'
+         VALUES ($1::uuid, 'game.rtp.updated', 'game', $2::text, jsonb_build_object(
+           'game', $3::text, 'previousHouseEdgeBps', $4::int, 'houseEdgeBps', $5::int,
+           'previousRtpBps', $6::int, 'rtpBps', $7::int, 'scope', 'all-vault-profiles'
          ))`,
         [actorUserId, game.id, slug, 10_000 - (previousProfile?.rtpBps ?? 9_600), houseEdgeBps, previousProfile?.rtpBps ?? 9_600, 10_000 - houseEdgeBps],
       )
@@ -259,9 +259,9 @@ export async function updateBuiltInHouseEdge(actorUserId: string, slug: CasinoGa
     }
     await client.query(
       `INSERT INTO public.audit_logs (actor_user_id, action, entity_type, entity_id, details)
-       VALUES ($1, 'game.rtp.updated', 'game', $2, jsonb_build_object(
-         'game', $3, 'previousHouseEdgeBps', $4, 'houseEdgeBps', $5,
-         'previousRtpBps', $6, 'rtpBps', $7
+       VALUES ($1::uuid, 'game.rtp.updated', 'game', $2::text, jsonb_build_object(
+         'game', $3::text, 'previousHouseEdgeBps', $4::int, 'houseEdgeBps', $5::int,
+         'previousRtpBps', $6::int, 'rtpBps', $7::int
        ))`,
       [actorUserId, game.id, slug, previousHouseEdgeBps, houseEdgeBps, 10_000 - previousHouseEdgeBps, 10_000 - houseEdgeBps],
     )
