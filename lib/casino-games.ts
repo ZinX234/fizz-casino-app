@@ -9,7 +9,7 @@ import { assertVaultHeistConfig, cloneDefaultVaultHeistConfig, payoutMultiplierF
 
 export const CASINO_OWNER_EMAIL = 'benarch80@gmail.com'
 const MIN_EDGE_BPS = 100
-const MAX_EDGE_BPS = 1000
+const MAX_EDGE_BPS = 9900
 const MAX_WAGER_CENTS = 10_000
 const MAX_SAFE_PICKS = 8
 const CRASH_MAX_MULTIPLIER = 1000
@@ -194,7 +194,7 @@ export async function getCasinoAdminAccess(userId: string, sessionEmail: string 
 
 export async function updateBuiltInHouseEdge(actorUserId: string, slug: CasinoGameSlug, houseEdgeBps: number) {
   if (!Number.isInteger(houseEdgeBps) || houseEdgeBps < MIN_EDGE_BPS || houseEdgeBps > MAX_EDGE_BPS || houseEdgeBps % 10 !== 0) {
-    throw new CasinoGameError('House edge must be between 1% and 10%, in 0.1% increments.')
+    throw new CasinoGameError('House edge must be between 1% and 99%, in 0.1% increments.')
   }
 
   if (slug === 'vault-heist') {

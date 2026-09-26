@@ -105,7 +105,7 @@ export function assertVaultHeistConfig(value: unknown): asserts value is VaultHe
     if (!item || !/^[a-z0-9][a-z0-9-]{1,39}$/.test(item.id) || ids.has(item.id)) throw new Error('Profile IDs must be unique and use lowercase letters, numbers, and hyphens.')
     ids.add(item.id)
     if (typeof item.name !== 'string' || item.name.trim().length < 2 || item.name.trim().length > 40) throw new Error('Profile names must be 2–40 characters.')
-    if (!Number.isInteger(item.rtpBps) || item.rtpBps < 9000 || item.rtpBps > 9900) throw new Error('RTP must be between 90% and 99%.')
+    if (!Number.isInteger(item.rtpBps) || item.rtpBps < 100 || item.rtpBps > 9900) throw new Error('RTP must be between 1% and 99%.')
     if (!Number.isInteger(item.securityMax) || item.securityMax < 2 || item.securityMax > 10) throw new Error('Security maximum must be between 2 and 10.')
     if (!Number.isFinite(item.maxMultiplier) || item.maxMultiplier < 1.12 || item.maxMultiplier > 1000) throw new Error('Maximum multiplier must be between 1.12× and 1,000×.')
     let weightTotal = 0
