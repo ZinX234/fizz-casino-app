@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
 import {
@@ -23,6 +23,7 @@ import {
   UserRound,
   X,
 } from 'lucide-react'
+import { AffiliateCard } from '@/components/affiliate-card'
 import type { GameRecord } from '@/lib/casino-data'
 import type { PlayerProgression } from '@/lib/progression'
 import { formatFizzcoins } from '@/lib/format-money'
@@ -89,7 +90,7 @@ function LobbyRail() {
 
   return (
     <aside aria-label="Casino navigation" className="fixed inset-y-0 left-0 z-40 hidden w-[60px] flex-col items-center border-r border-white/[0.08] bg-[#101116] py-3 md:flex">
-      <Link href="/casino" aria-label="Fizz Casino lobby" className="mb-4 flex size-10 items-center justify-center rounded-xl bg-[#6b22eb] text-sm font-black text-white">F</Link>
+      <Link href="/casino" aria-label="Fizz Casino lobby" className="mb-4 flex size-10 items-center justify-center overflow-hidden rounded-xl bg-[#101116]"><img src="/fizz-casino-logo.png" alt="Fizz Casino" className="size-full object-contain" /></Link>
       <nav className="flex w-full flex-col items-center gap-2 border-y border-white/[0.06] py-3">
         {links.map(({ href, label, icon: Icon }, index) => (
           <Link key={href} href={href} aria-label={label} title={label} className={`flex size-10 items-center justify-center rounded-xl transition ${index === 0 ? 'bg-[#6c20f4] text-white shadow-[0_8px_24px_-12px_rgba(124,58,237,.9)]' : 'text-white/55 hover:bg-white/[0.06] hover:text-white'}`}>
@@ -109,8 +110,7 @@ function LobbyHeader({ currentPlayer, onOpenChat }: { currentPlayer: LobbyPlayer
     <header className="sticky top-0 z-30 border-b border-white/[0.08] bg-[#090a0d]/95 backdrop-blur-xl md:ml-[60px]">
       <div className="mx-auto flex h-[60px] max-w-[1280px] items-center justify-between gap-3 px-3 sm:px-5">
         <Link href="/casino" className="flex shrink-0 items-center gap-2.5" aria-label="Fizz Casino lobby home">
-          <span className="flex size-7 items-center justify-center rounded-lg bg-[#6b22eb] text-sm font-black text-white">F</span>
-          <span className="text-[17px] font-extrabold tracking-[-0.04em] text-white">FIZZ</span>
+  <img src="/fizz-casino-logo.png" alt="Fizz Casino" className="h-11 w-12 object-contain" />
         </Link>
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
           {currentPlayer ? (
@@ -181,7 +181,7 @@ function ProgressCard({ player }: { player: LobbyPlayer | null }) {
   )
 }
 
-function SpotlightRow({ games, canPlay }: { games: GameRecord[]; canPlay: (game: GameRecord) => boolean }) {
+function SpotlightRow({ games, currentPlayer, canPlay }: { games: GameRecord[]; currentPlayer: LobbyPlayer | null; canPlay: (game: GameRecord) => boolean }) {
   const spotlitGames = games.filter((game) => supportedGames.has(game.slug)).slice(0, 3)
   if (!spotlitGames.length) return null
 
@@ -190,7 +190,7 @@ function SpotlightRow({ games, canPlay }: { games: GameRecord[]; canPlay: (game:
       {spotlitGames.map((game) => {
         const spotlight = spotlights[game.slug] ?? { eyebrow: game.provider, title: game.name, detail: game.description }
         return (
-          <Link key={game.id} href={canPlay(game) ? `/games/${game.slug}` : '/account'} className="group relative isolate flex min-h-[142px] overflow-hidden rounded-lg bg-[#16171c] sm:min-h-[156px]">
+          <Link key={game.id} href={canPlay(game) ? `/games/${game.slug}` : currentPlayer ? '/account' : `/auth/sign-in?returnTo=/games/${game.slug}`} className="group relative isolate flex min-h-[184px] overflow-hidden rounded-lg bg-[#16171c] sm:min-h-[218px]">
             <img src={gameArtwork[game.slug]} alt="" className="absolute inset-0 -z-20 size-full object-cover transition duration-500 group-hover:scale-[1.04]" />
             <div className="absolute inset-0 -z-10 bg-gradient-to-r from-black/85 via-black/40 to-black/5" />
             <div className="flex max-w-[76%] flex-col justify-center px-4 py-4 sm:px-5">
@@ -252,6 +252,7 @@ function GameShelf({ games, dataError, currentPlayer }: { games: GameRecord[]; d
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
   const rail = useRef<HTMLDivElement>(null)
+  const searchInput = useRef<HTMLInputElement>(null)
   const canPlay = (game: GameRecord) => Boolean(currentPlayer && supportedGames.has(game.slug) && Number(currentPlayer.balance ?? 0) >= 1)
   const visibleGames = useMemo(() => games.filter((game) => {
     const matches = gameMatchesFilter(game, filter)
@@ -266,16 +267,29 @@ function GameShelf({ games, dataError, currentPlayer }: { games: GameRecord[]; d
     { id: 'tables', label: 'Table Games', icon: Star },
   ]
 
+  useEffect(() => {
+    function handleSearchShortcut(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        searchInput.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', handleSearchShortcut)
+    return () => window.removeEventListener('keydown', handleSearchShortcut)
+  }, [])
+
   function scrollShelf(direction: -1 | 1) {
     rail.current?.scrollBy({ left: direction * 480, behavior: 'smooth' })
   }
 
+  function resetShelf() {
+    setFilter('all')
+    setSearch('')
+    rail.current?.scrollTo({ left: 0, behavior: 'smooth' })
+  }
+
   return (
     <section id="games" aria-labelledby="game-shelf-title" className="scroll-mt-20">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 id="game-shelf-title" className="flex items-center gap-2.5 text-[20px] font-extrabold tracking-[-0.035em] text-white sm:text-[22px]"><Gamepad2 aria-hidden="true" className="size-[22px] text-[#a66aff]" /> Fizz Originals</h2>
-        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/35">Live game catalog · {games.length} available</span>
-      </div>
       <div className="grid gap-2.5 lg:grid-cols-[minmax(0,1.2fr)_minmax(230px,0.95fr)]">
         <nav aria-label="Game categories" className="flex min-h-[46px] items-center gap-1 overflow-x-auto rounded-md bg-[#1f2026] p-1.5">
           {tabs.map(({ id, label, icon: Icon }) => (
@@ -287,24 +301,31 @@ function GameShelf({ games, dataError, currentPlayer }: { games: GameRecord[]; d
         <label className="flex min-h-[46px] items-center gap-2.5 rounded-md bg-[#1f2026] px-3.5 text-white/50 focus-within:ring-1 focus-within:ring-[#a66aff]/60">
           <Search aria-hidden="true" className="size-4 shrink-0" />
           <span className="sr-only">Search games</span>
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search games" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-white/40" />
+          <input ref={searchInput} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search games" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-white/40" />
           <kbd className="hidden rounded bg-[#2b2c33] px-2 py-1 text-[9px] font-semibold text-white/55 sm:inline">Ctrl K</kbd>
         </label>
+      </div>
+      <div className="mb-4 mt-7 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 id="game-shelf-title" className="flex items-center gap-2.5 text-[20px] font-extrabold tracking-[-0.035em] text-white sm:text-[22px]"><Gamepad2 aria-hidden="true" className="size-[22px] text-[#a66aff]" /> Fizz Originals</h2>
+          <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.12em] text-white/35">Live game catalog · {games.length} available</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={resetShelf} className="rounded-full bg-[#22232a] px-4 py-2.5 text-[10px] font-semibold text-white/85 transition hover:bg-[#30313a]">View all</button>
+          <button type="button" onClick={() => scrollShelf(-1)} aria-label="Previous games" className="flex size-9 items-center justify-center rounded-full bg-[#22232a] text-white/55 transition hover:bg-[#30313a] hover:text-white"><ChevronLeft aria-hidden="true" className="size-4" /></button>
+          <button type="button" onClick={() => scrollShelf(1)} aria-label="Next games" className="flex size-9 items-center justify-center rounded-full bg-[#22232a] text-white/80 transition hover:bg-[#30313a] hover:text-white"><ChevronRight aria-hidden="true" className="size-4" /></button>
+        </div>
       </div>
       {dataError ? (
         <div role="alert" className="mt-5 flex min-h-32 flex-col items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 text-center">
           <CircleHelp aria-hidden="true" className="size-5 text-white/40" /><p className="mt-3 text-sm font-semibold text-white/80">The live game catalog is unavailable.</p><p className="mt-1 text-xs text-white/40">Try again later. No games have been substituted.</p>
         </div>
       ) : visibleGames.length ? (
-        <div className="relative mt-5">
+        <div className="relative">
           <div ref={rail} className="flex snap-x gap-3 overflow-x-auto pb-3 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.18)_transparent]">
-            {visibleGames.map((game) => <div key={game.id} className="w-[145px] shrink-0 sm:w-[155px]"><GameCard game={game} currentPlayer={currentPlayer} canPlay={canPlay(game)} /></div>)}
+            {visibleGames.map((game) => <div key={game.id} className="w-[145px] shrink-0 snap-start sm:w-[155px] xl:w-[168px]"><GameCard game={game} currentPlayer={currentPlayer} canPlay={canPlay(game)} /></div>)}
           </div>
-          <div className="mt-1 flex items-center justify-end gap-2">
-            <span className="mr-auto rounded-full bg-[#22232a] px-4 py-2 text-[10px] font-semibold text-white/85">{visibleGames.length} games</span>
-            <button type="button" onClick={() => scrollShelf(-1)} aria-label="Previous games" className="flex size-9 items-center justify-center rounded-full bg-[#22232a] text-white/55 transition hover:bg-[#30313a] hover:text-white"><ChevronLeft aria-hidden="true" className="size-4" /></button>
-            <button type="button" onClick={() => scrollShelf(1)} aria-label="Next games" className="flex size-9 items-center justify-center rounded-full bg-[#22232a] text-white/80 transition hover:bg-[#30313a] hover:text-white"><ChevronRight aria-hidden="true" className="size-4" /></button>
-          </div>
+          <p className="mt-1 text-[10px] text-white/35">{visibleGames.length} {visibleGames.length === 1 ? 'game' : 'games'}</p>
         </div>
       ) : (
         <div className="mt-5 rounded-xl border border-dashed border-white/[0.12] bg-white/[0.02] px-5 py-8 text-center">
@@ -393,9 +414,10 @@ export function CasinoLobby({ games, dataError, currentPlayer }: Props) {
       <LobbyHeader currentPlayer={currentPlayer} onOpenChat={() => setChatOpen(true)} />
       <main className="md:ml-[60px]">
         <div className="mx-auto flex max-w-[1280px] flex-col gap-4 px-3 pb-24 pt-5 sm:gap-5 sm:px-5 sm:pt-6">
-          <SpotlightRow games={games} canPlay={canPlay} />
-          <ProgressCard player={currentPlayer} />
+          <SpotlightRow games={games} currentPlayer={currentPlayer} canPlay={canPlay} />
           <GameShelf games={games} dataError={dataError} currentPlayer={currentPlayer} />
+          <ProgressCard player={currentPlayer} />
+          <AffiliateCard />
           <section className="flex flex-col gap-3 border-t border-white/[0.07] pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="flex items-center gap-2 text-[10px] leading-5 text-white/45"><BadgeCheck aria-hidden="true" className="size-3.5 shrink-0 text-emerald-200/65" /> Game balances are checked server-side. 1 USD = 400 Fizzcoins.</p>
             <Link href="/account/responsible-gaming" className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-white/50 transition hover:text-white/85"><ShieldCheck aria-hidden="true" className="size-3.5" /> Responsible play</Link>

@@ -21,7 +21,3 @@ CREATE TABLE IF NOT EXISTS public.lobby_chat_messages (
 
 CREATE INDEX IF NOT EXISTS lobby_chat_messages_created_idx
   ON public.lobby_chat_messages (created_at DESC, id DESC);
-
-COMMENT ON TABLE public.player_progression IS 'Lifetime XP is awarded atomically with each game wager; one XP per 100 Fizzcoins wagered.';
-COMMENT ON TABLE public.lobby_chat_messages IS 'Shared lobby chat. Email addresses are not stored in chat messages.';
-COMMENT ON COLUMN public.lobby_chat_messages.body IS 'Trimmed plain text rendered safely by React.';

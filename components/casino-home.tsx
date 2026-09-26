@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react'
 import { authClient } from '@/lib/auth/client'
+import { AffiliateCard } from '@/components/affiliate-card'
 import type { GameRecord } from '@/lib/casino-data'
 import { formatFizzcoins } from '@/lib/format-money'
 
@@ -31,7 +32,7 @@ type CasinoHomeProps = {
   dataError: boolean
 }
 
-const fizzLogo = 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-Y8AO1sXutEFbjR1ynbyHq9DhYR3zbV.png'
+const fizzLogo = '/fizz-casino-logo.png'
 function money(amount: string | null, currency: string | null) {
   if (amount === null || currency === null) return 'Balance unavailable'
   return formatFizzcoins(amount, currency)
@@ -58,7 +59,6 @@ function SiteHeader({ currentPlayer }: Pick<CasinoHomeProps, 'currentPlayer'>) {
       <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between px-4 sm:px-8">
         <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="Fizz Casino home">
           <img src={fizzLogo} alt="Fizz Casino" className="h-10 w-12 object-contain" />
-          <span className="text-[13px] font-black tracking-[0.2em] text-white">FIZZ</span>
         </Link>
 
         <nav aria-label="Main navigation" className="hidden items-center gap-7 lg:flex">
@@ -235,6 +235,7 @@ export function CasinoHome({ games, promotions, currentPlayer, vipLevel, dataErr
           <GameLobby games={games} dataError={dataError} />
           <PromotionSection promotions={promotions} />
           <VipSection currentPlayer={currentPlayer} vipLevel={vipLevel} />
+          <AffiliateCard />
           <section id="responsible-play" className="scroll-mt-28 border-t border-white/[0.07] py-9">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center"><div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-200/10 bg-emerald-200/[0.055] text-emerald-100/75"><ShieldCheck aria-hidden="true" className="size-5" /></div><div><h2 className="text-sm font-semibold text-white">Keep play in balance</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-white/45">Only play where it is legal and if you meet the legal age in your location. Set limits, take breaks, and never play with money you cannot afford to lose. Responsible gaming settings are available in your account.</p></div><Link href="/account/responsible-gaming" className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-white/60 transition hover:text-white sm:ml-auto">Review your limits <ArrowDownRight aria-hidden="true" className="size-3.5" /></Link></div>
           </section>
@@ -259,7 +260,7 @@ export function CasinoPageHeader({ title, eyebrow, detail }: { title: string; ey
 }
 
 export function CasinoHeaderForAccount() {
-  return <div className="border-b border-white/[0.07] bg-[#0b0c10]"><div className="mx-auto flex h-[68px] max-w-7xl items-center justify-between px-5 sm:px-8"><Link href="/" className="flex items-center gap-2" aria-label="Fizz Casino home"><img src={fizzLogo} alt="Fizz Casino" className="h-9 w-11 object-contain" /><span className="text-xs font-black tracking-[0.2em]">FIZZ</span></Link><Link href="/" className="text-sm text-white/55 hover:text-white">Back to lobby <ArrowUpRight aria-hidden="true" className="ml-1 inline size-3.5" /></Link></div></div>
+  return <div className="border-b border-white/[0.07] bg-[#0b0c10]"><div className="mx-auto flex h-[68px] max-w-7xl items-center justify-between px-5 sm:px-8"><Link href="/" className="flex items-center gap-2" aria-label="Fizz Casino home"><img src={fizzLogo} alt="Fizz Casino" className="h-9 w-11 object-contain" /></Link><Link href="/" className="text-sm text-white/55 hover:text-white">Back to lobby <ArrowUpRight aria-hidden="true" className="ml-1 inline size-3.5" /></Link></div></div>
 }
 
 export function AccountNavigation({ active }: { active: 'overview' | 'responsible' | 'support' }) {
