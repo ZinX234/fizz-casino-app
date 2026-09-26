@@ -38,15 +38,15 @@ export function getProfileValidationMessage(error: unknown) {
 }
 
 export const profileFieldRules = {
-  username: 'Use 3–20 lowercase letters, numbers, or underscores.',
+  username: 'Use 3–20 letters, numbers, or underscores. Uppercase letters are allowed.',
 } as const
 
 export function normalizeUsername(username: string) {
-  return username.trim().toLowerCase()
+  return username.trim()
 }
 
 export function validProfileUsername(username: string) {
-  return /^[a-z0-9_]{3,20}$/.test(username)
+  return /^[A-Za-z0-9_]{3,20}$/.test(username)
 }
 
 export function validProfileEmail(email: string) {

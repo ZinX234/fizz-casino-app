@@ -1,15 +1,16 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { createContext, useContext, useState, type FormEvent, type ReactNode } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { MessageCircle, Pin, PinOff, Send, X } from 'lucide-react'
+import { Crown, MessageCircle, Pin, PinOff, Send, X } from 'lucide-react'
 import { LobbyEconomy } from '@/components/lobby-economy'
 
 type LobbyMessage = {
   id: string
   senderId?: string
   senderName: string
+  isOwner: boolean
   body: string
   createdAt: string
 }
@@ -18,7 +19,6 @@ type ChatPayload = { messages: LobbyMessage[]; canSend: boolean }
 type ChatControls = { openChat: () => void }
 
 const ChatContext = createContext<ChatControls | null>(null)
-const PIN_STORAGE_KEY = 'fizz-casino-lobby-chat-pinned'
 
 const chatFetcher = async (url: string): Promise<ChatPayload> => {
   const response = await fetch(url, { cache: 'no-store' })
@@ -35,21 +35,7 @@ export function usePinnedLobbyChat() {
 export function PinnedLobbyChatProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)
   const [pinned, setPinned] = useState(false)
-  const [hydrated, setHydrated] = useState(false)
   const docked = open && pinned
-
-  useEffect(() => {
-    const savedPin = window.localStorage.getItem(PIN_STORAGE_KEY) === 'true'
-    setPinned(savedPin)
-    setOpen(savedPin)
-    setHydrated(true)
-  }, [])
-
-  useEffect(() => {
-    if (!hydrated) return
-    if (pinned) window.localStorage.setItem(PIN_STORAGE_KEY, 'true')
-    else window.localStorage.removeItem(PIN_STORAGE_KEY)
-  }, [hydrated, pinned])
 
   return (
     <ChatContext.Provider value={{ openChat: () => setOpen(true) }}>
@@ -110,7 +96,7 @@ function LobbyChatPanel({ open, onClose, pinned, onTogglePin }: { open: boolean;
         {!isLoading && !error && messages?.length === 0 && <p className="m-auto max-w-[230px] text-center text-xs leading-5 text-white/40">No messages yet. Start the conversation.</p>}
         {messages?.map((message) => (
           <article key={message.id} className="rounded-xl border border-white/[0.055] bg-white/[0.025] px-3 py-2.5">
-            <div className="flex items-center justify-between gap-3"><span className="truncate text-[10px] font-bold text-[#c49dff]">{message.senderName}</span><time dateTime={message.createdAt} className="shrink-0 text-[9px] text-white/35">{new Intl.DateTimeFormat('en', { hour: 'numeric', minute: '2-digit' }).format(new Date(message.createdAt))}</time></div>
+            <div className="flex items-center justify-between gap-3"><span className="flex min-w-0 items-center gap-1 truncate text-[10px] font-bold text-[#c49dff]"><span className="truncate">{message.senderName}</span>{message.isOwner && <span role="img" aria-label="Fizz Casino owner" title="Fizz Casino owner" className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-amber-300/30 bg-amber-200/10 px-1 py-0.5 text-[7px] font-black leading-none tracking-[0.04em] text-amber-200"><Crown aria-hidden="true" className="size-2.5" />OWNER</span>}</span><time dateTime={message.createdAt} className="shrink-0 text-[9px] text-white/35">{new Intl.DateTimeFormat('en', { hour: 'numeric', minute: '2-digit' }).format(new Date(message.createdAt))}</time></div>
             <p className="mt-1.5 break-words whitespace-pre-wrap text-xs leading-5 text-white/80">{message.body}</p>
           </article>
         ))}

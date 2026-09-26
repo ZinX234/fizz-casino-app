@@ -7,7 +7,7 @@ import type { CasinoGameSlug, GameRoundView, GameRtpSetting } from '@/lib/casino
 import { xpForFizzcoinWager } from '@/lib/progression'
 import { assertVaultHeistConfig, cloneDefaultVaultHeistConfig, payoutMultiplierForRtp, payoutMultiplierForVaultPick, sanitizeVaultHeistConfig, type VaultHeistConfig, type VaultHeistOutcome, type VaultHeistProfile } from '@/lib/vault-heist-config'
 
-const OWNER_EMAIL = 'benarch80@gmail.com'
+export const CASINO_OWNER_EMAIL = 'benarch80@gmail.com'
 const MIN_EDGE_BPS = 100
 const MAX_EDGE_BPS = 1000
 const MAX_WAGER_CENTS = 10_000
@@ -156,7 +156,7 @@ export async function getVaultHeistLeaderboard() {
 }
 
 export async function getCasinoAdminAccess(userId: string, sessionEmail: string | null | undefined) {
-  if (!sessionEmail || sessionEmail.trim().toLowerCase() !== OWNER_EMAIL) {
+  if (!sessionEmail || sessionEmail.trim().toLowerCase() !== CASINO_OWNER_EMAIL) {
     return { authorized: false }
   }
 
@@ -168,14 +168,14 @@ export async function getCasinoAdminAccess(userId: string, sessionEmail: string 
          AND EXISTS (SELECT 1 FROM public.roles WHERE id = 'admin')
        ON CONFLICT (user_id, role_id) DO NOTHING
        RETURNING user_id::text`,
-      [userId, OWNER_EMAIL],
+      [userId, CASINO_OWNER_EMAIL],
     )
 
     if (inserted[0]) {
       await client.query(
         `INSERT INTO public.audit_logs (actor_user_id, action, entity_type, entity_id, details)
          VALUES ($1::uuid, 'admin.role.bootstrapped', 'user', $3::text, jsonb_build_object('email', $2::text))`,
-        [userId, OWNER_EMAIL, userId],
+        [userId, CASINO_OWNER_EMAIL, userId],
       )
     }
 
@@ -186,7 +186,7 @@ export async function getCasinoAdminAccess(userId: string, sessionEmail: string 
          JOIN neon_auth."user" u ON u.id = ur.user_id
          WHERE ur.user_id = $1 AND ur.role_id = 'admin' AND lower(u.email) = lower($2)
        ) AS authorized`,
-      [userId, OWNER_EMAIL],
+      [userId, CASINO_OWNER_EMAIL],
     )
     return { authorized: rows[0]?.authorized === true }
   })

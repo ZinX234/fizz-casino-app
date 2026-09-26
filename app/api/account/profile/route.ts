@@ -4,7 +4,7 @@ import { databasePool } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 
 const profileSchema = z.object({
-  username: z.string().trim().min(3).max(20).regex(/^[a-zA-Z0-9_]+$/).transform((value) => value.toLowerCase()),
+  username: z.string().trim().min(3).max(20).regex(/^[A-Za-z0-9_]+$/),
   paypalFirstName: z.string().trim().min(1).max(80),
   paypalLastName: z.string().trim().min(1).max(80),
   paypalEmail: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
