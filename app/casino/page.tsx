@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth/server'
 import { getAvailableGames, getProgressionSnapshot, getWalletSnapshot, type GameRecord } from '@/lib/casino-data'
 import { getPlayerUsername } from '@/lib/player-profile'
 import { getKickLiveStatus } from '@/lib/kick-status'
+import { getPublishedSiteAnnouncements } from '@/lib/site-announcements'
 import type { PlayerProgression } from '@/lib/progression'
 
 export const dynamic = 'force-dynamic'
@@ -13,6 +14,7 @@ export default async function CasinoPage() {
   let games: GameRecord[] = []
   let dataError = false
   let kickIsLive = false
+  let announcements: Awaited<ReturnType<typeof getPublishedSiteAnnouncements>> = []
   try {
     games = await getAvailableGames()
   } catch (error) {
@@ -24,6 +26,12 @@ export default async function CasinoPage() {
     kickIsLive = await getKickLiveStatus()
   } catch (error) {
     console.error('[v0] Kick status unavailable:', error instanceof Error ? error.message : 'unknown error')
+  }
+
+  try {
+    announcements = await getPublishedSiteAnnouncements()
+  } catch (error) {
+    console.error('[v0] Lobby announcements unavailable:', error instanceof Error ? error.message : 'unknown error')
   }
 
   let currentPlayer: { id: string; name: string; email: string; balance: string | null; currency: string | null; progression: PlayerProgression } | null = null
@@ -55,5 +63,5 @@ export default async function CasinoPage() {
     }
   }
 
-  return <CasinoLobby games={games} dataError={dataError} currentPlayer={currentPlayer} kickIsLive={kickIsLive} />
+  return <CasinoLobby games={games} dataError={dataError} currentPlayer={currentPlayer} kickIsLive={kickIsLive} announcements={announcements} />
 }

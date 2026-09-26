@@ -89,7 +89,7 @@ export function payoutMultiplierForVaultPick(current: number, outcome: VaultHeis
 }
 
 export function payoutMultiplierForRtp(multiplier: number, rtpBps: number) {
-  return Math.floor((multiplier * rtpBps) / 100 + 1e-8) / 100
+  return Math.max(1, Math.floor((multiplier * rtpBps) / 100 + 1e-8) / 100)
 }
 
 function isCapturedOnFirstReveal(outcome: VaultHeistOutcome, securityMax: number) {

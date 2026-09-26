@@ -13,6 +13,7 @@ import {
   Crown,
   Gamepad2,
   Home,
+  Megaphone,
   Search,
   ShieldCheck,
   Sparkles,
@@ -23,6 +24,7 @@ import {
 import { AffiliateCard } from '@/components/affiliate-card'
 import type { GameRecord } from '@/lib/casino-data'
 import type { PlayerProgression } from '@/lib/progression'
+import type { AnnouncementCategory, SiteAnnouncement } from '@/lib/site-announcements'
 import { formatFizzcoins } from '@/lib/format-money'
 import { GlobalLobbyChatButton } from '@/components/pinned-lobby-chat'
 
@@ -40,6 +42,7 @@ type Props = {
   dataError: boolean
   currentPlayer: LobbyPlayer | null
   kickIsLive: boolean
+  announcements: SiteAnnouncement[]
 }
 
 const supportedGames = new Set(['crash', 'mines', 'towers', 'vault-heist'])
@@ -363,7 +366,46 @@ function GameShelf({ games, dataError, currentPlayer }: { games: GameRecord[]; d
   )
 }
 
-export function CasinoLobby({ games, dataError, currentPlayer, kickIsLive }: Props) {
+const announcementLabels: Record<AnnouncementCategory, string> = {
+  'new-game': 'New game',
+  'game-update': 'Game update',
+  'site-news': 'Site news',
+}
+
+function safeAnnouncementHref(value: string | null) {
+  if (!value) return null
+  if (value.startsWith('/') && !value.startsWith('//')) return value
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.toString() : null
+  } catch {
+    return null
+  }
+}
+
+function PublishedAnnouncements({ announcements }: { announcements: SiteAnnouncement[] }) {
+  if (!announcements.length) return null
+  return (
+    <section aria-labelledby="site-announcements-heading" className="overflow-hidden rounded-xl border border-violet-200/15 bg-[#17131f]/90 p-4 sm:p-5">
+      <div className="flex items-center gap-2.5"><Megaphone aria-hidden="true" className="size-4 text-violet-200" /><h2 id="site-announcements-heading" className="text-sm font-extrabold text-white">What&apos;s new at Fizz</h2><span className="rounded-full bg-violet-200/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-violet-100/75">Updates</span></div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {announcements.map((announcement) => {
+          const href = safeAnnouncementHref(announcement.linkUrl)
+          return (
+            <article key={announcement.id} className="flex min-h-32 flex-col rounded-lg border border-white/[0.07] bg-black/15 p-3.5">
+              <div className="flex items-center justify-between gap-2"><span className="text-[9px] font-bold uppercase tracking-[0.12em] text-violet-100/70">{announcementLabels[announcement.category]}</span><time dateTime={announcement.publishedAt ?? announcement.updatedAt} className="shrink-0 text-[9px] text-white/35">{new Date(announcement.publishedAt ?? announcement.updatedAt).toLocaleDateString()}</time></div>
+              <h3 className="mt-2 text-sm font-bold leading-snug text-white">{announcement.title}</h3>
+              <p className="mt-1 line-clamp-3 flex-1 whitespace-pre-wrap text-[11px] leading-4 text-white/55">{announcement.body}</p>
+              {href && (href.startsWith('/') ? <Link href={href} className="mt-3 w-fit text-[10px] font-bold text-violet-100 hover:text-white">Read more <span aria-hidden="true">→</span></Link> : <a href={href} target="_blank" rel="noopener noreferrer" className="mt-3 w-fit text-[10px] font-bold text-violet-100 hover:text-white">Read more <span aria-hidden="true">→</span></a>)}
+            </article>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+export function CasinoLobby({ games, dataError, currentPlayer, kickIsLive, announcements }: Props) {
   return (
     <div className="min-h-screen bg-[#090a0d] text-white">
       <LobbyRail />
@@ -380,6 +422,7 @@ export function CasinoLobby({ games, dataError, currentPlayer, kickIsLive }: Pro
         }}
       >
         <div className="mx-auto flex max-w-[1280px] flex-col gap-4 px-3 pb-24 pt-5 sm:gap-5 sm:px-5 sm:pt-6">
+          <PublishedAnnouncements announcements={announcements} />
           <SpotlightRow games={games} currentPlayer={currentPlayer} />
           <GameShelf games={games} dataError={dataError} currentPlayer={currentPlayer} />
           <ProgressCard player={currentPlayer} />
