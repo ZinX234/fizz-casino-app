@@ -5,6 +5,39 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { authClient } from '@/lib/auth/client'
 
+function getAuthErrorMessage(error: unknown, isSignUp: boolean) {
+  const message =
+    error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
+      ? error.message.toLowerCase()
+      : ''
+
+  if (message.includes('invalid origin')) {
+    return 'This page is not authorized by Neon Auth. Open the current Fizz preview and try again.'
+  }
+
+  if (
+    message.includes('invalid email') ||
+    message.includes('invalid password') ||
+    message.includes('unauthorized') ||
+    message.includes('credential') ||
+    message.includes('user not found')
+  ) {
+    return 'The email or password is incorrect. Check your details and try again.'
+  }
+
+  if (message.includes('already exists') || message.includes('already registered')) {
+    return 'An account with this email already exists. Sign in instead.'
+  }
+
+  if (message.includes('fetch') || message.includes('network')) {
+    return 'Neon Auth could not be reached. Check your connection and try again.'
+  }
+
+  return isSignUp
+    ? 'We could not create your account. Check your details and try again.'
+    : 'We could not sign you in. Check your details and try again.'
+}
+
 export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
   const router = useRouter()
   const [name, setName] = useState('')
@@ -23,13 +56,24 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
         ? await authClient.signUp.email({ email: email.trim(), password, name: name.trim() })
         : await authClient.signIn.email({ email: email.trim(), password })
       if (result.error) {
-        setError('We could not complete your request. Check your details and try again.')
+        setError(getAuthErrorMessage(result.error, isSignUp))
         return
       }
-      router.push('/account')
+
+      const sessionResult = await authClient.getSession()
+      if (sessionResult.error || !sessionResult.data?.user) {
+        setError(
+          sessionResult.error
+            ? getAuthErrorMessage(sessionResult.error, isSignUp)
+            : 'Neon Auth accepted the request but did not start a session. Please try again.',
+        )
+        return
+      }
+
+      router.replace('/account')
       router.refresh()
-    } catch {
-      setError('We could not reach the account service. Please try again.')
+    } catch (authError) {
+      setError(getAuthErrorMessage(authError, isSignUp))
     } finally {
       setPending(false)
     }
