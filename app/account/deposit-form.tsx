@@ -12,6 +12,11 @@ export function DepositForm({ enabled, currency }: { enabled: boolean; currency:
     event.preventDefault()
     if (isSubmitting || !enabled) return
 
+    if (!Number.isFinite(Number(amount)) || Number(amount) < 2) {
+      setError('The minimum PayMeGate deposit is $2.00.')
+      return
+    }
+
     setError(null)
     setIsSubmitting(true)
     const checkoutWindow = window.open('about:blank', '_blank')
@@ -67,7 +72,7 @@ export function DepositForm({ enabled, currency }: { enabled: boolean; currency:
           maxLength={8}
           value={amount}
           onChange={(event) => setAmount(event.target.value)}
-          placeholder="e.g. 25.00"
+          placeholder="e.g. 2.00"
           aria-describedby="deposit-help deposit-error"
           className="min-h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-amber-100/40 focus:ring-2 focus:ring-amber-100/10"
         />
@@ -80,7 +85,7 @@ export function DepositForm({ enabled, currency }: { enabled: boolean; currency:
           {isSubmitting ? 'Connecting…' : 'Continue to PayMeGate'}
         </button>
       </div>
-      <p id="deposit-help" className="text-xs leading-5 text-white/40">Enter $0.01–$10,000.00. Your balance changes only after a verified payment webhook.</p>
+      <p id="deposit-help" className="text-xs leading-5 text-white/40">Minimum deposit $2.00; maximum $10,000.00. Your balance changes only after a verified payment webhook.</p>
       <p id="deposit-error" aria-live="polite" role={error ? 'alert' : undefined} className={error ? 'text-xs leading-5 text-rose-200' : 'sr-only'}>{error ?? ''}</p>
     </form>
   )

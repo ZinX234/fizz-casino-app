@@ -20,6 +20,7 @@ const payMeGateOrderSchema = z.object({
   }),
 })
 
+const MIN_DEPOSIT_CENTS = 200
 const MAX_DEPOSIT_CENTS = 1_000_000
 const CHECKOUT_EXPIRY_MINUTES = 30
 const APP_ORIGIN_FALLBACK = 'https://build-fizz-casino-app.vercel.app'
@@ -101,8 +102,8 @@ export async function POST(request: Request) {
 
   const parsed = depositSchema.safeParse(payload)
   const amountCents = parsed.success ? parseCents(parsed.data.amount) : null
-  if (!parsed.success || amountCents === null || amountCents <= BigInt(0) || amountCents > BigInt(MAX_DEPOSIT_CENTS)) {
-    return Response.json({ error: 'Enter a valid deposit amount between $0.01 and $10,000.00.' }, { status: 400 })
+  if (!parsed.success || amountCents === null || amountCents < BigInt(MIN_DEPOSIT_CENTS) || amountCents > BigInt(MAX_DEPOSIT_CENTS)) {
+    return Response.json({ error: 'Enter a valid deposit amount between $2.00 and $10,000.00.' }, { status: 400 })
   }
 
   if (!(await consumeUserRateLimit(session.user.id, 'deposit-create', 5, 3600))) {
