@@ -14,6 +14,8 @@ import {
   Gamepad2,
   Home,
   MessageCircle,
+  Pin,
+  PinOff,
   Search,
   Send,
   ShieldCheck,
@@ -90,7 +92,7 @@ function LobbyRail() {
 
   return (
     <aside aria-label="Casino navigation" className="fixed inset-y-0 left-0 z-40 hidden w-[60px] flex-col items-center border-r border-white/[0.08] bg-[#101116] py-3 md:flex">
-      <Link href="/casino" aria-label="Fizz Casino lobby" className="mb-4 flex size-10 items-center justify-center overflow-hidden rounded-xl bg-[#101116]"><img src="/fizz-casino-logo.png" alt="Fizz Casino" className="size-full object-contain" /></Link>
+      <Link href="/casino" aria-label="Fizz Casino lobby" className="mb-4 flex size-12 items-center justify-center overflow-hidden rounded-xl bg-[#101116]"><img src="/fizz-casino-logo.png" alt="Fizz Casino" className="size-full object-contain" /></Link>
       <nav className="flex w-full flex-col items-center gap-2 border-y border-white/[0.06] py-3">
         {links.map(({ href, label, icon: Icon }, index) => (
           <Link key={href} href={href} aria-label={label} title={label} className={`flex size-10 items-center justify-center rounded-xl transition ${index === 0 ? 'bg-[#6c20f4] text-white shadow-[0_8px_24px_-12px_rgba(124,58,237,.9)]' : 'text-white/55 hover:bg-white/[0.06] hover:text-white'}`}>
@@ -105,12 +107,12 @@ function LobbyRail() {
   )
 }
 
-function LobbyHeader({ currentPlayer, onOpenChat }: { currentPlayer: LobbyPlayer | null; onOpenChat: () => void }) {
+function LobbyHeader({ currentPlayer, onOpenChat, chatPinned }: { currentPlayer: LobbyPlayer | null; onOpenChat: () => void; chatPinned: boolean }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-white/[0.08] bg-[#090a0d]/95 backdrop-blur-xl md:ml-[60px]">
-      <div className="mx-auto flex h-[60px] max-w-[1280px] items-center justify-between gap-3 px-3 sm:px-5">
-        <Link href="/casino" className="flex shrink-0 items-center gap-2.5" aria-label="Fizz Casino lobby home">
-  <img src="/fizz-casino-logo.png" alt="Fizz Casino" className="h-11 w-12 object-contain" />
+  <header className={`sticky top-0 z-30 border-b border-white/[0.08] bg-[#090a0d]/95 backdrop-blur-xl md:ml-[60px] ${chatPinned ? 'md:mr-[320px]' : ''}`}>
+  <div className="mx-auto flex h-[72px] max-w-[1280px] items-center justify-between gap-3 px-3 sm:px-5">
+  <Link href="/casino" className="flex shrink-0 items-center gap-2.5" aria-label="Fizz Casino lobby home">
+  <img src="/fizz-casino-logo.png" alt="Fizz Casino" className="size-16 object-contain" />
         </Link>
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
           {currentPlayer ? (
@@ -181,7 +183,7 @@ function ProgressCard({ player }: { player: LobbyPlayer | null }) {
   )
 }
 
-function SpotlightRow({ games, currentPlayer, canPlay }: { games: GameRecord[]; currentPlayer: LobbyPlayer | null; canPlay: (game: GameRecord) => boolean }) {
+function SpotlightRow({ games, currentPlayer }: { games: GameRecord[]; currentPlayer: LobbyPlayer | null }) {
   const spotlitGames = games.filter((game) => supportedGames.has(game.slug)).slice(0, 3)
   if (!spotlitGames.length) return null
 
@@ -190,7 +192,7 @@ function SpotlightRow({ games, currentPlayer, canPlay }: { games: GameRecord[]; 
       {spotlitGames.map((game) => {
         const spotlight = spotlights[game.slug] ?? { eyebrow: game.provider, title: game.name, detail: game.description }
         return (
-          <Link key={game.id} href={canPlay(game) ? `/games/${game.slug}` : currentPlayer ? '/account' : `/auth/sign-in?returnTo=/games/${game.slug}`} className="group relative isolate flex min-h-[184px] overflow-hidden rounded-lg bg-[#16171c] sm:min-h-[218px]">
+          <Link key={game.id} href={currentPlayer ? `/games/${game.slug}` : `/auth/sign-in?returnTo=/games/${game.slug}`} aria-label={`${currentPlayer ? 'Open' : 'Sign in to play'} ${game.name}`} className="group relative isolate flex min-h-[184px] overflow-hidden rounded-lg bg-[#16171c] sm:min-h-[218px]">
             <img src={gameArtwork[game.slug]} alt="" className="absolute inset-0 -z-20 size-full object-cover transition duration-500 group-hover:scale-[1.04]" />
             <div className="absolute inset-0 -z-10 bg-gradient-to-r from-black/85 via-black/40 to-black/5" />
             <div className="flex max-w-[76%] flex-col justify-center px-4 py-4 sm:px-5">
@@ -243,7 +245,7 @@ function GameCard({ game, currentPlayer, canPlay }: { game: GameRecord; currentP
     </article>
   )
 
-  if (canPlay) return <Link href={`/games/${game.slug}`} aria-label={`Play ${game.name} using Fizzcoins`}>{card}</Link>
+  if (currentPlayer && isSupported) return <Link href={`/games/${game.slug}`} aria-label={`Open ${game.name} game`}>{card}</Link>
   if (!currentPlayer && isSupported) return <Link href={`/auth/sign-in?returnTo=/games/${game.slug}`} aria-label={`Sign in to play ${game.name}`}>{card}</Link>
   return card
 }
@@ -338,7 +340,7 @@ function GameShelf({ games, dataError, currentPlayer }: { games: GameRecord[]; d
   )
 }
 
-function LobbyChat({ currentPlayer, open, onClose }: { currentPlayer: LobbyPlayer | null; open: boolean; onClose: () => void }) {
+function LobbyChat({ currentPlayer, open, pinned, onClose, onTogglePin }: { currentPlayer: LobbyPlayer | null; open: boolean; pinned: boolean; onClose: () => void; onTogglePin: () => void }) {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState('')
@@ -369,11 +371,14 @@ function LobbyChat({ currentPlayer, open, onClose }: { currentPlayer: LobbyPlaye
 
   return (
     <>
-      {open && <button type="button" aria-label="Close lobby chat" onClick={onClose} className="fixed inset-0 z-40 cursor-default bg-black/35 md:bg-transparent" />}
-      <section aria-label="Fizz lobby chat" aria-hidden={!open} inert={!open} className={`fixed bottom-20 right-3 z-50 flex h-[min(560px,calc(100dvh-7rem))] w-[min(390px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-white/[0.12] bg-[#121318] shadow-[0_24px_80px_-28px_rgba(0,0,0,.9)] transition duration-200 md:bottom-5 md:right-5 ${open ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0'}`}>
+      {open && !pinned && <button type="button" aria-label="Close lobby chat" onClick={onClose} className="fixed inset-0 z-40 cursor-default bg-black/35 md:bg-transparent" />}
+      <section aria-label="Fizz lobby chat" aria-hidden={!open} inert={!open} className={`fixed bottom-20 right-3 z-50 flex h-[min(620px,calc(100dvh-7rem))] w-[min(350px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-white/[0.12] bg-[#121318] shadow-[0_24px_80px_-28px_rgba(0,0,0,.9)] transition duration-200 md:bottom-5 md:right-5 ${pinned ? 'md:inset-y-[72px] md:right-0 md:bottom-0 md:h-auto md:w-[320px] md:rounded-none md:border-y-0 md:border-r-0' : ''} ${open ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0'}`}>
         <header className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3.5">
           <div><h2 className="text-sm font-bold text-white">Lobby chat</h2><p className="mt-1 text-[10px] text-white/40">Messages refresh automatically · be respectful</p></div>
-          <button type="button" onClick={onClose} aria-label="Close lobby chat" className="flex size-8 items-center justify-center rounded-full text-white/55 transition hover:bg-white/[0.06] hover:text-white"><X aria-hidden="true" className="size-4" /></button>
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={onTogglePin} aria-label={pinned ? 'Unpin lobby chat' : 'Pin lobby chat to side'} aria-pressed={pinned} title={pinned ? 'Unpin chat' : 'Pin chat to side'} className="flex size-8 items-center justify-center rounded-full text-white/55 transition hover:bg-white/[0.06] hover:text-white">{pinned ? <PinOff aria-hidden="true" className="size-4" /> : <Pin aria-hidden="true" className="size-4" />}</button>
+            <button type="button" onClick={onClose} aria-label="Close lobby chat" className="flex size-8 items-center justify-center rounded-full text-white/55 transition hover:bg-white/[0.06] hover:text-white"><X aria-hidden="true" className="size-4" /></button>
+          </div>
         </header>
         <div role="log" aria-label="Lobby chat messages" aria-live="polite" className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
           {isLoading && <p role="status" className="py-4 text-center text-xs text-white/45">Loading lobby chat…</p>}
@@ -406,15 +411,16 @@ function LobbyChat({ currentPlayer, open, onClose }: { currentPlayer: LobbyPlaye
 
 export function CasinoLobby({ games, dataError, currentPlayer }: Props) {
   const [chatOpen, setChatOpen] = useState(false)
-  const canPlay = (game: GameRecord) => Boolean(currentPlayer && supportedGames.has(game.slug) && Number(currentPlayer.balance ?? 0) >= 1)
+  const [chatPinned, setChatPinned] = useState(false)
+  const chatDocked = chatOpen && chatPinned
 
   return (
     <div className="min-h-screen bg-[#090a0d] text-white">
       <LobbyRail />
-      <LobbyHeader currentPlayer={currentPlayer} onOpenChat={() => setChatOpen(true)} />
-      <main className="md:ml-[60px]">
+      <LobbyHeader currentPlayer={currentPlayer} onOpenChat={() => setChatOpen(true)} chatPinned={chatDocked} />
+      <main className={`md:ml-[60px] ${chatDocked ? 'md:mr-[320px]' : ''}`}>
         <div className="mx-auto flex max-w-[1280px] flex-col gap-4 px-3 pb-24 pt-5 sm:gap-5 sm:px-5 sm:pt-6">
-          <SpotlightRow games={games} currentPlayer={currentPlayer} canPlay={canPlay} />
+          <SpotlightRow games={games} currentPlayer={currentPlayer} />
           <GameShelf games={games} dataError={dataError} currentPlayer={currentPlayer} />
           <ProgressCard player={currentPlayer} />
           <AffiliateCard />
@@ -428,7 +434,7 @@ export function CasinoLobby({ games, dataError, currentPlayer }: Props) {
       <button type="button" onClick={() => setChatOpen((open) => !open)} aria-expanded={chatOpen} aria-label={chatOpen ? 'Close lobby chat' : 'Open lobby chat'} className="fixed bottom-4 right-4 z-40 flex size-12 items-center justify-center rounded-full bg-[#6b19f5] text-white shadow-[0_10px_30px_-12px_rgba(107,25,245,.9)] transition hover:bg-[#792fff] md:bottom-5 md:right-5">
         {chatOpen ? <X aria-hidden="true" className="size-5" /> : <MessageCircle aria-hidden="true" className="size-5" />}
       </button>
-      <LobbyChat currentPlayer={currentPlayer} open={chatOpen} onClose={() => setChatOpen(false)} />
+      <LobbyChat currentPlayer={currentPlayer} open={chatOpen} pinned={chatPinned} onClose={() => setChatOpen(false)} onTogglePin={() => setChatPinned((pinned) => !pinned)} />
     </div>
   )
 }
