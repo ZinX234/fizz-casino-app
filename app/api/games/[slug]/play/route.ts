@@ -5,7 +5,7 @@ import { databasePool, consumeUserRateLimit } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 
 const requestSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('start'), requestId: z.string().uuid(), wagerCents: z.number().int(), mineCount: z.number().int().optional(), expectedRtpBps: z.number().int().min(9000).max(9900), profileId: z.string().regex(/^[a-z0-9][a-z0-9-]{1,39}$/).optional() }).strict(),
+  z.object({ action: z.literal('start'), requestId: z.string().uuid(), wagerCents: z.number().int(), mineCount: z.number().int().optional(), expectedRtpBps: z.number().int().min(100).max(9900), profileId: z.string().regex(/^[a-z0-9][a-z0-9-]{1,39}$/).optional() }).strict(),
   z.object({ action: z.literal('pick'), sessionId: z.string().uuid(), position: z.number().int() }).strict(),
   z.object({ action: z.literal('cashout'), sessionId: z.string().uuid() }).strict(),
   z.object({ action: z.literal('resume') }).strict(),
