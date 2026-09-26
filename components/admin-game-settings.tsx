@@ -34,7 +34,7 @@ export function AdminGameSettings({ initialSettings }: { initialSettings: GameRt
   return (
     <section className="mt-8 rounded-[24px] border border-amber-100/10 bg-[#12141a] p-5 sm:p-7" aria-labelledby="game-settings-heading">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div><p className="eyebrow">Published odds</p><h2 id="game-settings-heading" className="mt-2 text-xl font-bold">Game RTP &amp; house edge</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-white/45">Changes are global, disclosed on each game, logged, and apply only to rounds started after the save. Active rounds keep their original settings. Vault Heist publishes the selected RTP across all profiles.</p></div>
+        <div><p className="eyebrow">Published odds</p><h2 id="game-settings-heading" className="mt-2 text-xl font-bold">Game RTP &amp; house edge</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-white/45">Changes are global, disclosed on each game, logged, and apply only to rounds started after the save. Active rounds keep their original settings. Vault Heist calibrates door odds to the selected reference RTP, measured by cashing out after the first surviving reveal; player strategy can change realized returns.</p></div>
         <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/10 bg-emerald-200/[0.04] px-3 py-2 text-[11px] font-semibold text-emerald-100/70"><ShieldCheck aria-hidden="true" className="size-4" /> Server-enforced</div>
       </div>
       <div className="mt-6 grid gap-3 lg:grid-cols-3">

@@ -5,7 +5,7 @@ import type { PoolClient } from 'pg'
 import { databasePool, withTransaction } from '@/lib/db'
 import type { CasinoGameSlug, GameRoundView, GameRtpSetting } from '@/lib/casino-game-types'
 import { xpForFizzcoinWager } from '@/lib/progression'
-import { assertVaultHeistConfig, cloneDefaultVaultHeistConfig, payoutMultiplierForVaultPick, sanitizeVaultHeistConfig, simulateVaultHeistCashoutAfterEverySafeDoor, type VaultHeistConfig, type VaultHeistOutcome, type VaultHeistProfile } from '@/lib/vault-heist-config'
+import { assertVaultHeistConfig, calibrateVaultHeistConfig, cloneDefaultVaultHeistConfig, payoutMultiplierForVaultPick, sanitizeVaultHeistConfig, simulateVaultHeistCashoutAfterEverySafeDoor, type VaultHeistConfig, type VaultHeistOutcome, type VaultHeistProfile } from '@/lib/vault-heist-config'
 
 const OWNER_EMAIL = 'benarch80@gmail.com'
 const MIN_EDGE_BPS = 100
@@ -89,8 +89,10 @@ export async function getVaultHeistConfiguration(): Promise<VaultHeistConfig> {
 }
 
 export async function updateVaultHeistConfiguration(actorUserId: string, configuration: VaultHeistConfig) {
+  let calibratedConfiguration: VaultHeistConfig
   try {
     assertVaultHeistConfig(configuration)
+    calibratedConfiguration = calibrateVaultHeistConfig(configuration)
   } catch (error) {
     throw new CasinoGameError(error instanceof Error ? error.message : 'Vault Heist settings are invalid.')
   }
@@ -103,14 +105,14 @@ export async function updateVaultHeistConfiguration(actorUserId: string, configu
     const previous = sanitizeVaultHeistConfig(parseOutcome(game.configuration).vaultHeist)
     await client.query(
       `UPDATE public.games SET configuration = configuration || jsonb_build_object('vaultHeist', $2::jsonb), updated_at = now() WHERE id = $1::uuid`,
-      [game.id, JSON.stringify(configuration)],
+      [game.id, JSON.stringify(calibratedConfiguration)],
     )
     await client.query(
       `INSERT INTO public.audit_logs (actor_user_id, action, entity_type, entity_id, details)
        VALUES ($1, 'game.vault-heist.updated', 'game', $2, $3::jsonb)`,
-      [actorUserId, game.id, JSON.stringify({ previousProfileCount: previous.profiles.length, profileCount: configuration.profiles.length, activeProfileId: configuration.activeProfileId, theme: configuration.theme })],
+      [actorUserId, game.id, JSON.stringify({ previousProfileCount: previous.profiles.length, profileCount: calibratedConfiguration.profiles.length, activeProfileId: calibratedConfiguration.activeProfileId, theme: calibratedConfiguration.theme })],
     )
-    return configuration
+    return calibratedConfiguration
   })
 }
 
@@ -210,10 +212,10 @@ export async function updateBuiltInHouseEdge(actorUserId: string, slug: CasinoGa
       if (!game) throw new CasinoGameError('Game settings were not found.', 404)
       const previousConfiguration = sanitizeVaultHeistConfig(parseOutcome(game.configuration).vaultHeist)
       const previousProfile = previousConfiguration.profiles.find((profile) => profile.id === previousConfiguration.activeProfileId)
-      const nextConfiguration: VaultHeistConfig = {
+      const nextConfiguration = calibrateVaultHeistConfig({
         ...previousConfiguration,
         profiles: previousConfiguration.profiles.map((profile) => ({ ...profile, rtpBps: 10_000 - houseEdgeBps })),
-      }
+      })
       assertVaultHeistConfig(nextConfiguration)
       await client.query(
         `UPDATE public.games SET configuration = configuration || jsonb_build_object('vaultHeist', $2::jsonb), updated_at = now() WHERE id = $1::uuid`,
