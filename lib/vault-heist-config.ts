@@ -88,82 +88,12 @@ export function payoutMultiplierForVaultPick(current: number, outcome: VaultHeis
   return Math.min(maximum, Math.round((current + (VAULT_HEIST_REWARD_INCREASES[outcome] ?? 0)) * 100) / 100)
 }
 
+export function payoutMultiplierForRtp(multiplier: number, rtpBps: number) {
+  return Math.floor((multiplier * rtpBps) / 100 + 1e-8) / 100
+}
+
 function isCapturedOnFirstReveal(outcome: VaultHeistOutcome, securityMax: number) {
   return outcome === 'caught' || (outcome === 'guard_patrol' && securityMax <= 2)
-}
-
-function allocateWeightBudget(
-  outcomes: VaultHeistOutcome[],
-  sourceWeights: Record<VaultHeistOutcome, number>,
-  total: number,
-) {
-  const sourceTotal = outcomes.reduce((sum, outcome) => sum + sourceWeights[outcome], 0)
-  if (!outcomes.length || !sourceTotal || total <= 0) return new Map<VaultHeistOutcome, number>()
-
-  const budget = Math.max(0, total - outcomes.length)
-  const shares = outcomes.map((outcome) => {
-    const exact = (budget * sourceWeights[outcome]) / sourceTotal
-    return { outcome, weight: 1 + Math.floor(exact), remainder: exact % 1 }
-  })
-  let remainder = total - shares.reduce((sum, share) => sum + share.weight, 0)
-  for (const share of [...shares].sort((left, right) => right.remainder - left.remainder)) {
-    if (remainder <= 0) break
-    share.weight += 1
-    remainder -= 1
-  }
-  return new Map(shares.map(({ outcome, weight }) => [outcome, weight]))
-}
-
-export function calibrateVaultHeistProfile(profile: VaultHeistProfile): VaultHeistProfile {
-  const activeOutcomes = VAULT_HEIST_OUTCOMES.filter((outcome) => profile.enabled[outcome] && profile.weights[outcome] > 0)
-  const safeOutcomes = activeOutcomes.filter((outcome) => !isCapturedOnFirstReveal(outcome, profile.securityMax))
-  const capturedOutcomes = activeOutcomes.filter((outcome) => isCapturedOnFirstReveal(outcome, profile.securityMax))
-  const safeWeight = safeOutcomes.reduce((sum, outcome) => sum + profile.weights[outcome], 0)
-  if (!safeWeight) throw new Error(`Profile “${profile.name}” needs an enabled outcome that can survive the first reveal.`)
-
-  const weightedReturn = safeOutcomes.reduce(
-    (sum, outcome) => sum + profile.weights[outcome] * payoutMultiplierForVaultPick(1, outcome, profile.maxMultiplier),
-    0,
-  )
-  const averageSafeMultiplier = weightedReturn / safeWeight
-  const estimatedSafeBudget = Math.max(1, Math.min(9_999, Math.round(profile.rtpBps / averageSafeMultiplier)))
-  const nextEnabled = { ...profile.enabled }
-  let safeWeightBudget = estimatedSafeBudget
-  let calibratedSafeWeights = allocateWeightBudget(safeOutcomes, profile.weights, safeWeightBudget)
-  let smallestRtpDifference = Number.POSITIVE_INFINITY
-
-  for (let candidateBudget = Math.max(1, estimatedSafeBudget - 100); candidateBudget <= Math.min(9_999, estimatedSafeBudget + 100); candidateBudget++) {
-    const candidateWeights = allocateWeightBudget(safeOutcomes, profile.weights, candidateBudget)
-    const candidateReturn = safeOutcomes.reduce(
-      (sum, outcome) => sum + (candidateWeights.get(outcome) ?? 0) * payoutMultiplierForVaultPick(1, outcome, profile.maxMultiplier),
-      0,
-    )
-    const difference = Math.abs(candidateReturn - profile.rtpBps)
-    if (difference < smallestRtpDifference) {
-      smallestRtpDifference = difference
-      safeWeightBudget = candidateBudget
-      calibratedSafeWeights = candidateWeights
-    }
-  }
-
-  const capturedWeightBudget = 10_000 - safeWeightBudget
-  const nextWeights = Object.fromEntries(VAULT_HEIST_OUTCOMES.map((outcome) => [outcome, 0])) as Record<VaultHeistOutcome, number>
-  for (const [outcome, weight] of calibratedSafeWeights) nextWeights[outcome] = weight
-
-  if (!capturedOutcomes.length) {
-    nextEnabled.caught = true
-    nextWeights.caught = capturedWeightBudget
-  } else {
-    for (const [outcome, weight] of allocateWeightBudget(capturedOutcomes, profile.weights, capturedWeightBudget)) {
-      nextWeights[outcome] = weight
-    }
-  }
-
-  return { ...profile, enabled: nextEnabled, weights: nextWeights }
-}
-
-export function calibrateVaultHeistConfig(config: VaultHeistConfig): VaultHeistConfig {
-  return { ...config, profiles: config.profiles.map(calibrateVaultHeistProfile) }
 }
 
 export function assertVaultHeistConfig(value: unknown): asserts value is VaultHeistConfig {
@@ -202,36 +132,18 @@ export function cloneDefaultVaultHeistConfig(): VaultHeistConfig {
 
 export function sanitizeVaultHeistConfig(value: unknown): VaultHeistConfig {
   const defaults = cloneDefaultVaultHeistConfig()
-  if (!value || typeof value !== 'object') return calibrateVaultHeistConfig(defaults)
+  if (!value || typeof value !== 'object') return defaults
   const candidate = value as Partial<VaultHeistConfig>
   try {
     assertVaultHeistConfig(candidate)
-    return calibrateVaultHeistConfig(candidate)
+    return candidate as VaultHeistConfig
   } catch {
-    return calibrateVaultHeistConfig(defaults)
+    return defaults
   }
 }
 
 export function profileHouseEdge(profile: VaultHeistProfile) {
   return 10_000 - profile.rtpBps
-}
-
-export function simulateVaultHeistCashoutAfterEverySafeDoor(profile: VaultHeistProfile) {
-  const calibratedProfile = calibrateVaultHeistProfile(profile)
-  const outcomes = VAULT_HEIST_OUTCOMES.filter((outcome) => calibratedProfile.enabled[outcome] && calibratedProfile.weights[outcome] > 0)
-  const totalWeight = outcomes.reduce((sum, outcome) => sum + calibratedProfile.weights[outcome], 0)
-  const weightedReturn = outcomes.reduce((sum, outcome) => {
-    if (isCapturedOnFirstReveal(outcome, calibratedProfile.securityMax)) return sum
-    return sum + calibratedProfile.weights[outcome] * payoutMultiplierForVaultPick(1, outcome, calibratedProfile.maxMultiplier)
-  }, 0)
-  const capturedWeight = outcomes.reduce((sum, outcome) =>
-    sum + (isCapturedOnFirstReveal(outcome, calibratedProfile.securityMax) ? calibratedProfile.weights[outcome] : 0), 0)
-  return {
-    samples: totalWeight,
-    estimatedRtpBps: Math.round((weightedReturn / totalWeight) * 10_000),
-    caughtRateBps: Math.round((capturedWeight / totalWeight) * 10_000),
-    policy: 'cash out after the first surviving reveal',
-  }
 }
 
 export function getVaultHeistOutcomeLabel(outcome: VaultHeistOutcome) {
