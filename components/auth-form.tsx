@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { authClient } from '@/lib/auth/client'
 
@@ -39,7 +38,6 @@ function getAuthErrorMessage(error: unknown, isSignUp: boolean) {
 }
 
 export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
-  const router = useRouter()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -60,8 +58,7 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
         return
       }
 
-      router.replace('/account')
-      router.refresh()
+      window.location.replace('/account')
     } catch (authError) {
       setError(getAuthErrorMessage(authError, isSignUp))
     } finally {
