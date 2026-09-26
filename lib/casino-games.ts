@@ -5,6 +5,7 @@ import type { PoolClient } from 'pg'
 import { databasePool, withTransaction } from '@/lib/db'
 import type { CasinoGameSlug, GameRoundView, GameRtpSetting } from '@/lib/casino-game-types'
 import { xpForFizzcoinWager } from '@/lib/progression'
+import { crashMultiplierAtElapsed } from '@/lib/crash-math'
 import { payoutMultiplierForSafePicks } from '@/lib/casino-payout-math'
 import { assertVaultHeistConfig, cloneDefaultVaultHeistConfig, payoutMultiplierForRtp, payoutMultiplierForVaultPick, sanitizeVaultHeistConfig, type VaultHeistConfig, type VaultHeistOutcome, type VaultHeistProfile } from '@/lib/vault-heist-config'
 
@@ -613,13 +614,18 @@ export async function startCasinoRound(input: {
       [input.userId, xpForFizzcoinWager(input.wagerCents)],
     )
 
+    if (input.slug === 'crash' && Number(outcome.crashPoint) <= 1) {
+      await settleRound(client, { bet_id: betId, session_id: session.id }, input.userId, outcome, '0.00', 'loss')
+    }
+
     return roundView({
       session_id: session.id,
       slug: input.slug,
       started_at: session.started_at,
       wager_amount: wagerAmount,
-      payout_amount: '0.00',
-      bet_status: 'pending',
+      payout_amount: String(outcome.payoutAmount ?? '0.00'),
+      bet_status: outcome.result ? 'settled' : 'pending',
+      session_status: outcome.result ? 'completed' : 'active',
       outcome,
       server_seed_hash: commitment,
     })
@@ -672,12 +678,13 @@ export async function playCasinoAction(input: {
   userId: string
   slug: CasinoGameSlug
   sessionId: string
-  action: 'pick' | 'cashout'
+  action: 'pick' | 'cashout' | 'sync'
   position?: number
 }): Promise<GameRoundView> {
   return withTransaction(async (client) => {
     const row = await loadRound(client, input.userId, input.slug, input.sessionId)
     if (row.bet_status !== 'pending' || row.session_status !== 'active') throw new CasinoGameError('This round is already finished.', 409)
+    if (input.action === 'sync' && input.slug !== 'crash') throw new CasinoGameError('Round sync is only available for Crash.')
     const outcome = parseOutcome(row.outcome)
     const picks = numberArray(outcome.picks)
 
@@ -774,11 +781,13 @@ export async function playCasinoAction(input: {
         const { rows } = await client.query<{ elapsed: number }>(
           `SELECT greatest(extract(epoch FROM now() - $1::timestamptz), 0)::float8 AS elapsed`, [row.started_at],
         )
-        const currentMultiplier = Math.floor((1 + Number(rows[0].elapsed) * 0.2) * 100) / 100
+        const currentMultiplier = crashMultiplierAtElapsed(Number(rows[0].elapsed))
         const crashPoint = Number(outcome.crashPoint)
         if (currentMultiplier >= crashPoint) {
           outcome.crashedAt = crashPoint
           await settleRound(client, row, input.userId, outcome, '0.00', 'loss')
+        } else if (input.action === 'sync') {
+          return roundView(row)
         } else {
           outcome.cashoutMultiplier = currentMultiplier
           const payoutCents = Math.floor(Number(row.wager_amount) * currentMultiplier * 100 + 1e-8)

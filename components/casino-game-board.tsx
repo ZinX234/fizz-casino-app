@@ -1,9 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Check, CircleHelp, ShieldCheck, TriangleAlert } from 'lucide-react'
 import type { GameRoundView, GameRtpSetting } from '@/lib/casino-game-types'
+import { crashMultiplierAtElapsed } from '@/lib/crash-math'
 import { payoutMultiplierForSafePicks } from '@/lib/casino-payout-math'
 import { formatFizzcoins } from '@/lib/format-money'
 
@@ -26,19 +27,57 @@ export function CasinoGameBoard({ setting, initialRound, initialBalance, currenc
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
   const [verified, setVerified] = useState('')
+  const requestInFlight = useRef(false)
+  const syncInFlight = useRef(false)
 
   useEffect(() => {
     if (setting.slug !== 'crash' || round?.status !== 'active') return
     const updateMultiplier = () => {
-      const elapsedSeconds = Math.max(0, (Date.now() - new Date(round.startedAt).getTime()) / 1000)
-      setCurrentMultiplier(Math.floor((1 + elapsedSeconds * 0.2) * 100) / 100)
+      const elapsedSeconds = (Date.now() - new Date(round.startedAt).getTime()) / 1000
+      setCurrentMultiplier(crashMultiplierAtElapsed(elapsedSeconds))
     }
     updateMultiplier()
     const interval = window.setInterval(updateMultiplier, 50)
     return () => window.clearInterval(interval)
   }, [round, setting.slug])
 
+  useEffect(() => {
+    if (setting.slug !== 'crash' || round?.status !== 'active') return
+    let active = true
+
+    const syncRound = async () => {
+      if (syncInFlight.current || requestInFlight.current) return
+      syncInFlight.current = true
+      try {
+        const response = await fetch(`/api/games/${setting.slug}/play`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'sync', sessionId: round.sessionId }),
+        })
+        if (!response.ok) return
+        const result = await response.json()
+        if (active && result.round?.status === 'settled') {
+          setRound(result.round)
+          if (result.wallet?.balance) setBalance(result.wallet.balance)
+        }
+      } catch {
+        return
+      } finally {
+        syncInFlight.current = false
+      }
+    }
+
+    void syncRound()
+    const interval = window.setInterval(() => void syncRound(), 1000)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+    }
+  }, [round?.sessionId, round?.status, setting.slug])
+
   async function sendAction(payload: Record<string, unknown>) {
+    if (requestInFlight.current) return
+    requestInFlight.current = true
     setPending(true)
     setError('')
     setVerified('')
@@ -55,6 +94,7 @@ export function CasinoGameBoard({ setting, initialRound, initialBalance, currenc
     } catch (issue) {
       setError(issue instanceof Error ? issue.message : 'The game request could not be completed.')
     } finally {
+      requestInFlight.current = false
       setPending(false)
     }
   }
