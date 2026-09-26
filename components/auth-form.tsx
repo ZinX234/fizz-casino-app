@@ -60,16 +60,6 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
         return
       }
 
-      const sessionResult = await authClient.getSession()
-      if (sessionResult.error || !sessionResult.data?.user) {
-        setError(
-          sessionResult.error
-            ? getAuthErrorMessage(sessionResult.error, isSignUp)
-            : 'Neon Auth accepted the request but did not start a session. Please try again.',
-        )
-        return
-      }
-
       router.replace('/account')
       router.refresh()
     } catch (authError) {
