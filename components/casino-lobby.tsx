@@ -422,7 +422,7 @@ export function CasinoLobby({ games, dataError, currentPlayer }: Props) {
         className={`md:ml-[60px] ${chatDocked ? 'md:mr-[320px]' : ''}`}
         style={{
           backgroundImage:
-            'linear-gradient(rgba(9, 10, 13, 0.52), rgba(9, 10, 13, 0.64)), url("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-fXGlmWR4xl0HrAiCfi882vMVrnx8Qx.png")',
+            'linear-gradient(rgba(9, 10, 13, 0.16), rgba(9, 10, 13, 0.24)), url("https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-fXGlmWR4xl0HrAiCfi882vMVrnx8Qx.png")',
           backgroundPosition: 'center top',
           backgroundSize: 'cover',
           backgroundAttachment: 'fixed',
