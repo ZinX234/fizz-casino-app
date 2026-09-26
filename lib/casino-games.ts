@@ -211,10 +211,20 @@ export async function updateBuiltInHouseEdge(actorUserId: string, slug: CasinoGa
         profiles: previousConfiguration.profiles.map((profile) => ({ ...profile, rtpBps: 10_000 - houseEdgeBps })),
       }
       assertVaultHeistConfig(nextConfiguration)
-      await client.query(
-        `UPDATE public.games SET configuration = configuration || jsonb_build_object('vaultHeist', $2::jsonb), updated_at = now() WHERE id = $1::uuid`,
-        [game.id, JSON.stringify(nextConfiguration)],
+      const { rows: updatedGames } = await client.query<{ configuration: unknown }>(
+        `UPDATE public.games
+         SET configuration = configuration || jsonb_build_object('houseEdgeBps', $3::int, 'vaultHeist', $2::jsonb), updated_at = now()
+         WHERE id = $1::uuid
+         RETURNING configuration`,
+        [game.id, JSON.stringify(nextConfiguration), houseEdgeBps],
       )
+      if (!updatedGames[0]) throw new CasinoGameError('Game settings could not be confirmed after saving.', 500)
+      const savedConfiguration = parseOutcome(updatedGames[0].configuration)
+      const savedVaultConfiguration = sanitizeVaultHeistConfig(savedConfiguration.vaultHeist)
+      const savedProfile = savedVaultConfiguration.profiles.find((profile) => profile.id === savedVaultConfiguration.activeProfileId)
+      if (!savedProfile || savedProfile.rtpBps !== 10_000 - houseEdgeBps) {
+        throw new CasinoGameError('Saved Vault Heist odds did not match the requested settings.', 500)
+      }
       await client.query(
         `INSERT INTO public.audit_logs (actor_user_id, action, entity_type, entity_id, details)
          VALUES ($1, 'game.rtp.updated', 'game', $2, jsonb_build_object(
@@ -235,12 +245,18 @@ export async function updateBuiltInHouseEdge(actorUserId: string, slug: CasinoGa
     if (!game) throw new CasinoGameError('Game settings were not found.', 404)
 
     const previousHouseEdgeBps = readHouseEdge(game.configuration)
-    await client.query(
+    const { rows: updatedGames } = await client.query<{ configuration: unknown }>(
       `UPDATE public.games
        SET configuration = configuration || jsonb_build_object('houseEdgeBps', $2::int), updated_at = now()
-       WHERE id = $1::uuid`,
+       WHERE id = $1::uuid
+       RETURNING configuration`,
       [game.id, houseEdgeBps],
     )
+    if (!updatedGames[0]) throw new CasinoGameError('Game settings could not be confirmed after saving.', 500)
+    const persistedHouseEdgeBps = readHouseEdge(updatedGames[0].configuration)
+    if (persistedHouseEdgeBps !== houseEdgeBps) {
+      throw new CasinoGameError('Saved game odds did not match the requested settings.', 500)
+    }
     await client.query(
       `INSERT INTO public.audit_logs (actor_user_id, action, entity_type, entity_id, details)
        VALUES ($1, 'game.rtp.updated', 'game', $2, jsonb_build_object(
