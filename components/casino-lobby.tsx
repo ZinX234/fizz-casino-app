@@ -29,6 +29,7 @@ import { AffiliateCard } from '@/components/affiliate-card'
 import type { GameRecord } from '@/lib/casino-data'
 import type { PlayerProgression } from '@/lib/progression'
 import { formatFizzcoins } from '@/lib/format-money'
+import { LobbyEconomy } from '@/components/lobby-economy'
 
 type LobbyPlayer = {
   id: string
@@ -55,7 +56,7 @@ type LobbyMessage = {
 
 const supportedGames = new Set(['crash', 'mines', 'towers', 'vault-heist'])
 const gameArtwork: Record<string, string> = {
-  crash: '/games/fizz-dice.png',
+  crash: '/games/fizz-crash-airplane.png',
   mines: '/games/fizz-mines.png',
   towers: '/games/fizz-towers.png',
   'vault-heist': '/games/vault-heist-bg.png',
@@ -197,6 +198,7 @@ function SpotlightRow({ games, currentPlayer }: { games: GameRecord[]; currentPl
           <Link key={game.id} href={currentPlayer ? `/games/${game.slug}` : `/auth/sign-in?returnTo=/games/${game.slug}`} aria-label={`${currentPlayer ? 'Open' : 'Sign in to play'} ${game.name}`} className="group relative isolate flex min-h-[184px] overflow-hidden rounded-lg bg-[#16171c] sm:min-h-[218px]">
             <img src={gameArtwork[game.slug]} alt="" className="absolute inset-0 -z-20 size-full object-cover transition duration-500 group-hover:scale-[1.04]" />
             <div className="absolute inset-0 -z-10 bg-gradient-to-r from-black/85 via-black/40 to-black/5" />
+            {game.slug === 'crash' && <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full border border-red-300/20 bg-[#120c11]/85 px-2.5 py-1.5 text-[8px] font-extrabold uppercase tracking-[0.12em] text-white"><span aria-hidden="true" className="size-1.5 rounded-full bg-red-400 shadow-[0_0_8px_rgba(248,113,113,.85)]" />Live on Kick</span>}
             <div className="flex max-w-[76%] flex-col justify-center px-4 py-4 sm:px-5">
               <span className="mb-2 w-fit rounded-sm bg-white/90 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-[#25232b]">{spotlight.eyebrow}</span>
               <h2 className="text-[18px] font-black uppercase leading-[1.04] tracking-[-0.03em] text-white sm:text-[20px]">{spotlight.title}</h2>
@@ -226,7 +228,7 @@ function GameCard({ game, currentPlayer, canPlay }: { game: GameRecord; currentP
     <article className={`group relative flex-none snap-start overflow-hidden rounded-[9px] border bg-[#14151a] transition duration-200 ${canPlay ? 'border-white/[0.11] hover:-translate-y-0.5 hover:border-[#ae77ff]/70 hover:shadow-[0_12px_30px_-18px_rgba(143,75,255,.6)]' : 'border-white/[0.08]'}`}>
       <div className="relative aspect-[0.76/1] overflow-hidden bg-[#1d1e24]">
         {game.coverImageUrl || gameArtwork[game.slug] ? (
-          <img src={game.coverImageUrl || gameArtwork[game.slug]} alt="" loading="lazy" className="size-full object-cover transition duration-500 group-hover:scale-[1.045]" />
+          <img src={game.slug === 'crash' ? gameArtwork.crash : game.coverImageUrl || gameArtwork[game.slug]} alt="" loading="lazy" className="size-full object-cover transition duration-500 group-hover:scale-[1.045]" />
         ) : (
           <div className="flex size-full items-center justify-center bg-[radial-gradient(ellipse_at_50%_35%,#383343,#17171c_75%)]"><Gamepad2 aria-hidden="true" className="size-9 text-white/25" /></div>
         )}
@@ -236,7 +238,8 @@ function GameCard({ game, currentPlayer, canPlay }: { game: GameRecord; currentP
           <h3 className="truncate text-[20px] font-black uppercase leading-none tracking-[-0.05em] text-white [text-shadow:0_2px_8px_rgba(0,0,0,.7)]">{game.name}</h3>
           <p className="mt-1 truncate text-[9px] font-medium text-white/65">{game.category}</p>
         </div>
-        {canPlay && <span className="absolute right-2 top-7 rounded-full border border-white/20 bg-black/35 px-2 py-1 text-[8px] font-bold text-white/85">PLAY</span>}
+        {game.slug === 'crash' && <span className="absolute right-2 top-6 inline-flex items-center gap-1 rounded-full border border-red-300/20 bg-[#120c11]/85 px-2 py-1 text-[7px] font-extrabold uppercase tracking-[0.08em] text-white"><span aria-hidden="true" className="size-1 rounded-full bg-red-400" />Live on Kick</span>}
+        {canPlay && <span className="absolute right-2 top-12 rounded-full border border-white/20 bg-black/35 px-2 py-1 text-[8px] font-bold text-white/85">PLAY</span>}
       </div>
       <div className="flex min-h-[43px] items-center justify-between gap-2 px-2.5">
         <span className="truncate text-[10px] font-semibold text-white/70">{game.name}</span>
@@ -382,6 +385,7 @@ function LobbyChat({ currentPlayer, open, pinned, onClose, onTogglePin }: { curr
             <button type="button" onClick={onClose} aria-label="Close lobby chat" className="flex size-8 items-center justify-center rounded-full text-white/55 transition hover:bg-white/[0.06] hover:text-white"><X aria-hidden="true" className="size-4" /></button>
           </div>
         </header>
+        <LobbyEconomy signedIn={Boolean(currentPlayer)} />
         <div role="log" aria-label="Lobby chat messages" aria-live="polite" className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
           {isLoading && <p role="status" className="py-4 text-center text-xs text-white/45">Loading lobby chat…</p>}
           {error && <p role="alert" className="rounded-lg border border-rose-200/10 bg-rose-100/[0.04] p-3 text-xs text-rose-100/75">Lobby chat could not be loaded. Try again in a moment.</p>}

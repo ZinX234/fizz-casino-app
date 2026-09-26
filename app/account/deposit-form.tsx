@@ -3,14 +3,14 @@
 import { useState, type FormEvent } from 'react'
 import { ArrowUpRight, LoaderCircle } from 'lucide-react'
 
-export function DepositForm({ enabled, currency, emailVerified }: { enabled: boolean; currency: string; emailVerified: boolean }) {
+export function DepositForm({ enabled, currency }: { enabled: boolean; currency: string }) {
   const [amount, setAmount] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (isSubmitting || !enabled || !emailVerified) return
+    if (isSubmitting || !enabled) return
 
     if (!Number.isFinite(Number(amount)) || Number(amount) < 2) {
       setError('The minimum PayMeGate deposit is $2.00.')
@@ -51,15 +51,6 @@ export function DepositForm({ enabled, currency, emailVerified }: { enabled: boo
         <p className="mt-2 text-xs leading-5 text-white/55">Checkout stays disabled until the PayMeGate API key and webhook signing secret are configured on the server. Payments are credited only after a valid signed confirmation.</p>
         <p className="mt-3 text-xs text-white/45">Configure this exact HTTPS webhook URL in PayMeGate:</p>
         <p className="mt-2 break-all font-mono text-[11px] text-amber-100/65">https://v0-playfizz.vercel.app/api/webhooks/paymegate</p>
-      </div>
-    )
-  }
-
-  if (!emailVerified) {
-    return (
-      <div role="status" className="mt-5 rounded-xl border border-amber-100/10 bg-amber-100/[0.035] p-4">
-        <p className="text-sm font-semibold text-white/80">Verify your email before depositing.</p>
-        <p className="mt-2 text-xs leading-5 text-white/50">Use the code above to confirm your address. Deposits stay locked until verification is complete.</p>
       </div>
     )
   }

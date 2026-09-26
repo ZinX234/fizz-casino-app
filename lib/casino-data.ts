@@ -3,6 +3,7 @@ import 'server-only'
 import { ensureBuiltInGames } from '@/lib/casino-games'
 import { getPlayerProgression } from '@/lib/progression'
 import { databasePool, withTransaction } from '@/lib/db'
+import { decryptPayoutDestination } from '@/lib/payout-details'
 
 export interface GameRecord {
   id: string
@@ -65,7 +66,7 @@ export async function getWalletSnapshot(userId: string) {
 
 export async function getAccountSnapshot(userId: string) {
   const wallet = await getWalletSnapshot(userId)
-  const [transactions, bets, bonuses, vip, limits, progression, emailVerification] = await Promise.all([
+  const [transactions, bets, bonuses, vip, limits, progression, withdrawals] = await Promise.all([
     databasePool.query(
       `SELECT wt.id::text, wt.type, wt.amount::text, wt.description, wt.created_at,
               w.currency
@@ -98,12 +99,13 @@ export async function getAccountSnapshot(userId: string) {
        ORDER BY created_at DESC`, [userId],
     ),
     getProgressionSnapshot(userId),
-    databasePool.query<{ email_verified: boolean }>(
-      `SELECT "emailVerified" AS email_verified FROM neon_auth."user" WHERE id = $1::uuid`,
-      [userId],
+    databasePool.query(
+      `SELECT id::text, amount::text, currency, status, created_at, method
+       FROM public.withdrawals WHERE user_id = $1::uuid
+       ORDER BY created_at DESC LIMIT 10`, [userId],
     ),
   ])
-  return { wallet, transactions: transactions.rows, bets: bets.rows, bonuses: bonuses.rows, vip: vip.rows[0] ?? null, limits: limits.rows, progression, emailVerified: emailVerification.rows[0]?.email_verified === true }
+  return { wallet, transactions: transactions.rows, bets: bets.rows, bonuses: bonuses.rows, vip: vip.rows[0] ?? null, limits: limits.rows, progression, withdrawals: withdrawals.rows }
 }
 
 export async function getAdminCounts() {
@@ -133,6 +135,61 @@ export async function getAdminPlayers() {
      ORDER BY u."createdAt" DESC LIMIT 100`,
   )
   return rows
+}
+
+export async function getAdminManualDepositRequests() {
+  const { rows } = await databasePool.query<{
+    id: string
+    depositId: string
+    userId: string
+    playerName: string
+    amount: string
+    currency: string
+    paymentReference: string
+    firstName: string
+    lastName: string
+    paymentEmail: string
+    fizzUsername: string
+    fizzEmail: string
+    createdAt: string
+  }>(
+    `SELECT r.id::text, r.deposit_id::text AS "depositId", d.user_id::text AS "userId",
+            coalesce(nullif(u.name, ''), 'Player') AS "playerName",
+            d.amount::text, d.currency, d.external_transaction_id AS "paymentReference",
+            r.first_name AS "firstName", r.last_name AS "lastName",
+            r.payment_email AS "paymentEmail", r.fizz_username AS "fizzUsername",
+            r.fizz_email AS "fizzEmail", r.created_at::text AS "createdAt"
+     FROM public.manual_deposit_requests r
+     JOIN public.deposits d ON d.id = r.deposit_id
+     JOIN neon_auth."user" u ON u.id = d.user_id
+     WHERE r.status = 'pending' AND d.status = 'pending' AND d.provider = 'manual-paypal'
+     ORDER BY r.created_at ASC LIMIT 100`,
+  )
+  return rows
+}
+
+export async function getAdminWithdrawalRequests() {
+  const { rows } = await databasePool.query<{
+    id: string
+    userId: string
+    playerName: string | null
+    amount: string
+    currency: string
+    method: string
+    destination: string | null
+    status: string
+    reviewNote: string | null
+    createdAt: string
+  }>(
+    `SELECT w.id::text, w.user_id::text AS "userId", u.name AS "playerName",
+            w.amount::text, w.currency, w.method, w.destination_token AS "destination",
+            w.status, w.review_note AS "reviewNote", w.created_at::text AS "createdAt"
+     FROM public.withdrawals w
+     JOIN neon_auth."user" u ON u.id = w.user_id
+     WHERE w.status IN ('pending', 'approved', 'processing')
+     ORDER BY w.created_at ASC LIMIT 100`,
+  )
+  return rows.map((row) => ({ ...row, destination: decryptPayoutDestination(row.destination) }))
 }
 
 export async function getSupportSnapshot(userId: string) {

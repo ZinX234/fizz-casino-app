@@ -34,13 +34,6 @@ export async function POST(request: Request, context: { params: Promise<{ slug: 
     const body = requestSchema.safeParse(payload)
     if (!body.success) return Response.json({ error: 'Invalid game request.' }, { status: 400 })
 
-    if (body.data.action === 'start') {
-      const { rows } = await databasePool.query<{ email_verified: boolean }>(
-        `SELECT "emailVerified" AS email_verified FROM neon_auth."user" WHERE id = $1::uuid`, [session.user.id],
-      )
-      if (!rows[0]?.email_verified) return Response.json({ error: 'Verify your email before placing a wager.' }, { status: 403 })
-    }
-
     let round
     if (body.data.action === 'start') {
       round = await startCasinoRound({

@@ -10,7 +10,7 @@ export class DepositPolicyError extends Error {
 function parseCents(value: string) {
   const match = /(\d+)(?:\.(\d{1,2}))?$/.exec(value)
   if (!match) return null
-  return BigInt(match[1]) * 100n + BigInt((match[2] ?? '').padEnd(2, '0'))
+  return BigInt(match[1]) * BigInt(100) + BigInt((match[2] ?? '').padEnd(2, '0'))
 }
 
 export async function enforceDepositPolicy(client: PoolClient, userId: string, amountCents: bigint) {
@@ -57,7 +57,7 @@ export async function enforceDepositPolicy(client: PoolClient, userId: string, a
          END`,
       [userId, limit.period],
     )
-    const spentCents = parseCents(spentResult.rows[0]?.total ?? '0') ?? 0n
+    const spentCents = parseCents(spentResult.rows[0]?.total ?? '0') ?? BigInt(0)
 
     if (spentCents + amountCents > limitCents) {
       throw new DepositPolicyError(`This deposit would exceed your ${limit.period} deposit limit.`, 400)
@@ -66,5 +66,5 @@ export async function enforceDepositPolicy(client: PoolClient, userId: string, a
 }
 
 export function formatCents(cents: bigint) {
-  return `${cents / 100n}.${String(cents % 100n).padStart(2, '0')}`
+  return `${cents / BigInt(100)}.${String(cents % BigInt(100)).padStart(2, '0')}`
 }

@@ -62,12 +62,16 @@ export async function ensureBuiltInGames() {
 export async function getBuiltInRtpSettings(): Promise<GameRtpSetting[]> {
   await ensureBuiltInGames()
   const { rows } = await databasePool.query<{ slug: CasinoGameSlug; name: string; configuration: unknown }>(
-    `SELECT slug, name, configuration FROM public.games WHERE slug = ANY($1::text[]) ORDER BY CASE slug WHEN 'crash' THEN 1 WHEN 'towers' THEN 2 ELSE 3 END`,
+    `SELECT slug, name, configuration FROM public.games WHERE slug = ANY($1::text[])
+     ORDER BY CASE slug WHEN 'crash' THEN 1 WHEN 'towers' THEN 2 WHEN 'mines' THEN 3 ELSE 4 END`,
     [gameCatalog.map((game) => game.slug)],
   )
   return rows.filter((row) => isGameSlug(row.slug)).map((row) => {
-    const houseEdgeBps = readHouseEdge(row.configuration)
-    return { slug: row.slug, name: row.name, houseEdgeBps, rtpBps: 10_000 - houseEdgeBps }
+    const configuration = parseOutcome(row.configuration)
+    const vaultConfiguration = row.slug === 'vault-heist' ? sanitizeVaultHeistConfig(configuration.vaultHeist) : null
+    const activeProfile = vaultConfiguration?.profiles.find((profile) => profile.id === vaultConfiguration.activeProfileId)
+    const rtpBps = activeProfile?.rtpBps ?? (10_000 - readHouseEdge(row.configuration))
+    return { slug: row.slug, name: row.name, houseEdgeBps: 10_000 - rtpBps, rtpBps }
   })
 }
 
@@ -203,6 +207,36 @@ export async function getCasinoAdminAccess(userId: string, sessionEmail: string 
 export async function updateBuiltInHouseEdge(actorUserId: string, slug: CasinoGameSlug, houseEdgeBps: number) {
   if (!Number.isInteger(houseEdgeBps) || houseEdgeBps < MIN_EDGE_BPS || houseEdgeBps > MAX_EDGE_BPS || houseEdgeBps % 10 !== 0) {
     throw new CasinoGameError('House edge must be between 1% and 10%, in 0.1% increments.')
+  }
+
+  if (slug === 'vault-heist') {
+    return withTransaction(async (client) => {
+      const { rows } = await client.query<{ id: string; name: string; configuration: unknown }>(
+        `SELECT id::text, name, configuration FROM public.games WHERE slug = $1 FOR UPDATE`, [slug],
+      )
+      const game = rows[0]
+      if (!game) throw new CasinoGameError('Game settings were not found.', 404)
+      const previousConfiguration = sanitizeVaultHeistConfig(parseOutcome(game.configuration).vaultHeist)
+      const previousProfile = previousConfiguration.profiles.find((profile) => profile.id === previousConfiguration.activeProfileId)
+      const nextConfiguration: VaultHeistConfig = {
+        ...previousConfiguration,
+        profiles: previousConfiguration.profiles.map((profile) => ({ ...profile, rtpBps: 10_000 - houseEdgeBps })),
+      }
+      assertVaultHeistConfig(nextConfiguration)
+      await client.query(
+        `UPDATE public.games SET configuration = configuration || jsonb_build_object('vaultHeist', $2::jsonb), updated_at = now() WHERE id = $1::uuid`,
+        [game.id, JSON.stringify(nextConfiguration)],
+      )
+      await client.query(
+        `INSERT INTO public.audit_logs (actor_user_id, action, entity_type, entity_id, details)
+         VALUES ($1, 'game.rtp.updated', 'game', $2, jsonb_build_object(
+           'game', $3, 'previousHouseEdgeBps', $4, 'houseEdgeBps', $5,
+           'previousRtpBps', $6, 'rtpBps', $7, 'scope', 'all-vault-profiles'
+         ))`,
+        [actorUserId, game.id, slug, 10_000 - (previousProfile?.rtpBps ?? 9_600), houseEdgeBps, previousProfile?.rtpBps ?? 9_600, 10_000 - houseEdgeBps],
+      )
+      return { slug, name: game.name, houseEdgeBps, rtpBps: 10_000 - houseEdgeBps }
+    })
   }
 
   return withTransaction(async (client) => {

@@ -4,7 +4,7 @@ import { CasinoGameError, getCasinoAdminAccess, supportedGameSlug, updateBuiltIn
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 
 const updateSchema = z.object({
-  slug: z.enum(['crash', 'towers', 'mines']),
+  slug: z.enum(['crash', 'towers', 'mines', 'vault-heist']),
   houseEdgeBps: z.number().int().min(100).max(1000).multipleOf(10),
 }).strict()
 

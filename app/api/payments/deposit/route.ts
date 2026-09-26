@@ -71,12 +71,8 @@ export async function POST(request: Request) {
     )
   }
 
-  const emailResult = await databasePool.query<{ email_verified: boolean }>(
-    `SELECT "emailVerified" AS email_verified FROM neon_auth."user" WHERE id = $1::uuid`,
-    [session.user.id],
-  )
-  if (!emailResult.rows[0]?.email_verified || !session.user.email) {
-    return Response.json({ error: 'Verify your account email before depositing.' }, { status: 403 })
+  if (!session.user.email) {
+    return Response.json({ error: 'Your account needs a contact email before starting checkout.' }, { status: 400 })
   }
 
   let rawBody: ArrayBuffer
