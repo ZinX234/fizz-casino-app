@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { ensureBuiltInGames } from '@/lib/casino-games'
+import { getPlayerProgression } from '@/lib/progression'
 import { databasePool, withTransaction } from '@/lib/db'
 
 export interface GameRecord {
@@ -37,6 +38,14 @@ export async function getLivePromotions() {
   return rows
 }
 
+export async function getProgressionSnapshot(userId: string) {
+  const { rows } = await databasePool.query<{ totalXp: string }>(
+    `SELECT total_xp::text AS "totalXp" FROM public.player_progression WHERE user_id = $1::uuid`,
+    [userId],
+  )
+  return getPlayerProgression(Number(rows[0]?.totalXp ?? 0))
+}
+
 export async function getWalletSnapshot(userId: string) {
   return withTransaction(async (client) => {
     await client.query(
@@ -56,7 +65,7 @@ export async function getWalletSnapshot(userId: string) {
 
 export async function getAccountSnapshot(userId: string) {
   const wallet = await getWalletSnapshot(userId)
-  const [transactions, bets, bonuses, vip, limits] = await Promise.all([
+  const [transactions, bets, bonuses, vip, limits, progression] = await Promise.all([
     databasePool.query(
       `SELECT wt.id::text, wt.type, wt.amount::text, wt.description, wt.created_at,
               w.currency
@@ -88,8 +97,9 @@ export async function getAccountSnapshot(userId: string) {
        WHERE user_id = $1 AND starts_at <= now() AND (ends_at IS NULL OR ends_at > now())
        ORDER BY created_at DESC`, [userId],
     ),
+    getProgressionSnapshot(userId),
   ])
-  return { wallet, transactions: transactions.rows, bets: bets.rows, bonuses: bonuses.rows, vip: vip.rows[0] ?? null, limits: limits.rows }
+  return { wallet, transactions: transactions.rows, bets: bets.rows, bonuses: bonuses.rows, vip: vip.rows[0] ?? null, limits: limits.rows, progression }
 }
 
 export async function getAdminCounts() {

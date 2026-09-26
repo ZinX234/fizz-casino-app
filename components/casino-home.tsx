@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { authClient } from '@/lib/auth/client'
 import type { GameRecord } from '@/lib/casino-data'
+import { formatFizzcoins } from '@/lib/format-money'
 
 type Promotion = { id: string; title: string; description: string; endsAt: string | null }
 type CasinoHomeProps = {
@@ -33,9 +34,7 @@ type CasinoHomeProps = {
 const fizzLogo = 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-Y8AO1sXutEFbjR1ynbyHq9DhYR3zbV.png'
 function money(amount: string | null, currency: string | null) {
   if (amount === null || currency === null) return 'Balance unavailable'
-  const number = Number(amount)
-  if (!Number.isFinite(number)) return 'Balance unavailable'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(number)
+  return formatFizzcoins(amount, currency)
 }
 
 function SiteHeader({ currentPlayer }: Pick<CasinoHomeProps, 'currentPlayer'>) {

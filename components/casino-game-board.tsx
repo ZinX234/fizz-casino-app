@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { ArrowLeft, Check, CircleHelp, ShieldCheck, TriangleAlert } from 'lucide-react'
 import type { GameRoundView, GameRtpSetting } from '@/lib/casino-game-types'
+import { formatFizzcoins } from '@/lib/format-money'
 
 const gameNames = { crash: 'Crash', towers: 'Towers', mines: 'Mines' } as const
 
@@ -18,7 +19,7 @@ type Props = {
 export function CasinoGameBoard({ setting, initialRound, initialBalance, currency, playerName }: Props) {
   const [round, setRound] = useState(initialRound)
   const [balance, setBalance] = useState(initialBalance)
-  const [wager, setWager] = useState('1.00')
+  const [wager, setWager] = useState('400')
   const [mineCount, setMineCount] = useState(initialRound?.mineCount ?? 3)
   const [currentMultiplier, setCurrentMultiplier] = useState(1)
   const [pending, setPending] = useState(false)
@@ -59,14 +60,18 @@ export function CasinoGameBoard({ setting, initialRound, initialBalance, currenc
 
   function startRound() {
     const amount = Number(wager)
-    if (!Number.isFinite(amount) || amount < 1 || amount > 100) {
-      setError('Choose a wager from $1.00 to $100.00.')
+    if (!Number.isSafeInteger(amount) || amount < 400 || amount > 40_000 || amount % 4 !== 0) {
+      setError('Choose a wager from 400 to 40,000 Fizzcoins in increments of 4.')
+      return
+    }
+    if (amount > Math.floor(Number(balance) * 400)) {
+      setError('Your Fizzcoin balance is too low for that wager.')
       return
     }
     void sendAction({
       action: 'start',
       requestId: crypto.randomUUID(),
-      wagerCents: Math.round(amount * 100),
+      wagerCents: amount / 4,
       mineCount: setting.slug === 'mines' ? mineCount : undefined,
       expectedRtpBps: setting.rtpBps,
     })
@@ -91,6 +96,7 @@ export function CasinoGameBoard({ setting, initialRound, initialBalance, currenc
   }
 
   const roundActive = round?.status === 'active'
+  const insufficientBalance = Math.floor(Number(balance) * 400) < 400
   const mineMultiplier = round?.picks.length && round.mineCount
     ? payoutMultiplier('mines', round.picks.length, round.mineCount, round.rtpBps)
     : 1
@@ -116,29 +122,30 @@ export function CasinoGameBoard({ setting, initialRound, initialBalance, currenc
 
             {roundActive ? (
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-xs text-white/45">Wager <span className="font-semibold text-white">{formatMoney(round!.wager, currency)}</span>{setting.slug === 'mines' && <span className="ml-2">· {round!.mineCount} mines</span>}</div>
-                {canCashout && <button type="button" disabled={pending} onClick={cashout} className="min-h-11 rounded-xl bg-[#f4bc63] px-6 text-sm font-bold text-[#1a140b] transition hover:bg-[#ffd48d] disabled:cursor-not-allowed disabled:opacity-50">{pending ? 'Settling…' : `Cash out${setting.slug === 'crash' ? ` · ${currentMultiplier.toFixed(2)}×` : ` · ${formatMoney(round!.picks.length ? (Number(round!.wager) * (setting.slug === 'mines' ? mineMultiplier : towerMultiplier)).toFixed(2) : '0', currency)}`}`}</button>}
+                <div className="text-xs text-white/45">Wager <span className="font-semibold text-white">{formatFizzcoins(round!.wager, currency)}</span>{setting.slug === 'mines' && <span className="ml-2">· {round!.mineCount} mines</span>}</div>
+                {canCashout && <button type="button" disabled={pending} onClick={cashout} className="min-h-11 rounded-xl bg-[#f4bc63] px-6 text-sm font-bold text-[#1a140b] transition hover:bg-[#ffd48d] disabled:cursor-not-allowed disabled:opacity-50">{pending ? 'Settling…' : `Cash out${setting.slug === 'crash' ? ` · ${currentMultiplier.toFixed(2)}×` : ` · ${formatFizzcoins(round!.picks.length ? (Number(round!.wager) * (setting.slug === 'mines' ? mineMultiplier : towerMultiplier)).toFixed(2) : '0', currency)}`}`}</button>}
               </div>
             ) : (
               <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-end">
-                <label className="flex flex-1 flex-col gap-2 text-xs font-semibold text-white/55">Wager amount
-                  <span className="flex h-11 items-center gap-2 rounded-xl border border-white/10 bg-[#0b0c10] px-3"><span className="text-white/35">{currency}</span><input aria-label="Wager amount" type="number" min="1" max="100" step="0.01" value={wager} onChange={(event) => setWager(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-white outline-none" /></span>
+                <label className="flex flex-1 flex-col gap-2 text-xs font-semibold text-white/55">Wager in Fizzcoins
+                  <span className="flex h-11 items-center gap-2 rounded-xl border border-white/10 bg-[#0b0c10] px-3"><span className="text-white/35">FC</span><input aria-label="Wager in Fizzcoins" type="number" min="400" max="40000" step="4" value={wager} onChange={(event) => setWager(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-white outline-none" /></span>
                 </label>
                 {setting.slug === 'mines' && <label className="flex flex-col gap-2 text-xs font-semibold text-white/55">Mines
                   <select aria-label="Mine count" value={mineCount} onChange={(event) => setMineCount(Number(event.target.value))} className="h-11 rounded-xl border border-white/10 bg-[#0b0c10] px-3 text-sm text-white outline-none">{Array.from({ length: 24 }, (_, index) => index + 1).map((count) => <option key={count} value={count}>{count} mines</option>)}</select>
                 </label>}
-                <button type="button" disabled={pending} onClick={startRound} className="min-h-11 rounded-xl bg-[#f4bc63] px-7 text-sm font-bold text-[#1a140b] transition hover:bg-[#ffd48d] disabled:cursor-not-allowed disabled:opacity-50">{pending ? 'Starting…' : round?.status === 'settled' ? 'Play again' : 'Start round'}</button>
+                <button type="button" disabled={pending || insufficientBalance} onClick={startRound} className="min-h-11 rounded-xl bg-[#f4bc63] px-7 text-sm font-bold text-[#1a140b] transition hover:bg-[#ffd48d] disabled:cursor-not-allowed disabled:opacity-50">{pending ? 'Starting…' : insufficientBalance ? 'Need 400 Fizzcoins' : round?.status === 'settled' ? 'Play again' : 'Start round'}</button>
               </div>
             )}
 
+            {insufficientBalance && !roundActive && <p role="status" className="mt-4 rounded-xl border border-amber-100/10 bg-amber-100/[0.035] px-4 py-3 text-xs leading-5 text-amber-50/70">At least 400 Fizzcoins are required to start a round. Your wallet balance is shown at the right.</p>}
             {error && <p role="alert" className="mt-4 rounded-xl border border-rose-200/15 bg-rose-100/[0.04] px-4 py-3 text-sm text-rose-100/80">{error}</p>}
-            {round?.status === 'settled' && <div className={`mt-4 flex items-start gap-3 rounded-xl border px-4 py-3 ${round.result === 'win' ? 'border-emerald-200/15 bg-emerald-100/[0.04]' : 'border-rose-200/15 bg-rose-100/[0.04]'}`}><span className="mt-0.5">{round.result === 'win' ? <Check aria-hidden="true" className="size-4 text-emerald-200" /> : <TriangleAlert aria-hidden="true" className="size-4 text-rose-200" />}</span><div><p className="text-sm font-semibold">{round.result === 'win' ? `Round paid ${formatMoney(round.payout, currency)}${round.cashoutMultiplier ? ` · ${round.cashoutMultiplier.toFixed(2)}×` : ''}` : 'Round lost · no payout'}</p><p className="mt-1 text-xs text-white/45">Your wallet balance is {formatMoney(balance, currency)}.</p></div></div>}
+            {round?.status === 'settled' && <div className={`mt-4 flex items-start gap-3 rounded-xl border px-4 py-3 ${round.result === 'win' ? 'border-emerald-200/15 bg-emerald-100/[0.04]' : 'border-rose-200/15 bg-rose-100/[0.04]'}`}><span className="mt-0.5">{round.result === 'win' ? <Check aria-hidden="true" className="size-4 text-emerald-200" /> : <TriangleAlert aria-hidden="true" className="size-4 text-rose-200" />}</span><div><p className="text-sm font-semibold">{round.result === 'win' ? `Round paid ${formatFizzcoins(round.payout, currency)}${round.cashoutMultiplier ? ` · ${round.cashoutMultiplier.toFixed(2)}×` : ''}` : 'Round lost · no payout'}</p><p className="mt-1 text-xs text-white/45">Your wallet balance is {formatFizzcoins(balance, currency)}.</p></div></div>}
 
             {round && <details className="mt-5 rounded-xl border border-white/[0.07] bg-black/10 px-4 py-3"><summary className="cursor-pointer text-xs font-semibold text-white/65">Fairness record · {round.status === 'active' ? 'seed commitment published' : 'seed revealed'}</summary><dl className="mt-3 grid gap-2 break-all text-[11px] text-white/45"><div><dt className="font-semibold text-white/65">SHA-256 commitment</dt><dd className="mt-1 font-mono">{round.commitment}</dd></div><div><dt className="font-semibold text-white/65">Client seed</dt><dd className="mt-1 font-mono">{round.clientSeed}</dd></div>{round.fairness && <div><dt className="font-semibold text-white/65">Revealed server seed</dt><dd className="mt-1 font-mono">{round.fairness.serverSeed}</dd></div>}</dl>{round.fairness && <button type="button" onClick={verifyCommitment} className="mt-3 rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-white/70 hover:text-white">Verify seed commitment</button>}{verified && <p role="status" className="mt-2 text-xs text-emerald-200/80">{verified}</p>}</details>}
           </section>
 
           <aside className="flex flex-col gap-4">
-            <section className="rounded-[20px] border border-white/[0.08] bg-[#12141a] p-5"><p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/40">Wallet balance</p><p className="mt-2 text-2xl font-bold tabular-nums">{formatMoney(balance, currency)}</p><p className="mt-2 text-xs leading-5 text-white/40">Maximum wager: $100.00. Every wager and payout is recorded in your wallet ledger.</p></section>
+            <section className="rounded-[20px] border border-white/[0.08] bg-[#12141a] p-5"><p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/40">Wallet balance</p><p className="mt-2 text-2xl font-bold tabular-nums">{formatFizzcoins(balance, currency)}</p><p className="mt-2 text-xs leading-5 text-white/40">Maximum wager: 40,000 Fizzcoins. Every wager and payout is recorded in your wallet ledger.</p></section>
             <section className="rounded-[20px] border border-amber-100/10 bg-amber-100/[0.025] p-5"><div className="flex items-center gap-2 text-xs font-bold text-amber-100/75"><CircleHelp aria-hidden="true" className="size-4" /> Odds stay visible</div><p className="mt-3 text-xs leading-5 text-white/45">The published RTP and house edge apply globally to new rounds. A setting change never alters an active round. Outcomes are generated server-side; the seed is revealed after settlement.</p></section>
             <p className="px-1 text-[11px] leading-5 text-white/35">Only play where legal and if you meet the legal age. Set limits and never wager more than you can afford to lose.</p>
           </aside>
@@ -190,11 +197,6 @@ function payoutMultiplier(slug: 'mines' | 'towers', picks: number, mineCount: nu
   return Math.floor((rtpBps / 10_000 / probability) * 100) / 100
 }
 
-function formatMoney(value: string, currency: string) {
-  const amount = Number(value)
-  if (!Number.isFinite(amount)) return '—'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
-}
 
 function gameDescription(slug: GameRtpSetting['slug']) {
   if (slug === 'crash') return 'Watch the multiplier climb, then cash out before the server-generated crash point.'

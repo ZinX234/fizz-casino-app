@@ -4,6 +4,7 @@ import { createHash, createHmac, randomBytes } from 'node:crypto'
 import type { PoolClient } from 'pg'
 import { databasePool, withTransaction } from '@/lib/db'
 import type { CasinoGameSlug, GameRoundView, GameRtpSetting } from '@/lib/casino-game-types'
+import { xpForFizzcoinWager } from '@/lib/progression'
 
 const OWNER_EMAIL = 'benarch80@gmail.com'
 const MIN_EDGE_BPS = 100
@@ -420,6 +421,14 @@ export async function startCasinoRound(input: {
       idempotencyKey,
       description: `${input.slug[0].toUpperCase()}${input.slug.slice(1)} wager`,
     })
+    await client.query(
+      `INSERT INTO public.player_progression (user_id, total_xp)
+       VALUES ($1::uuid, $2::bigint)
+       ON CONFLICT (user_id) DO UPDATE SET
+         total_xp = public.player_progression.total_xp + EXCLUDED.total_xp,
+         updated_at = now()`,
+      [input.userId, xpForFizzcoinWager(input.wagerCents)],
+    )
 
     return roundView({
       session_id: session.id,

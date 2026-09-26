@@ -1,6 +1,7 @@
-import { LobbyPage } from '@/components/casino-home'
+import { CasinoLobby } from '@/components/casino-lobby'
 import { auth } from '@/lib/auth/server'
-import { getAvailableGames, getWalletSnapshot, type GameRecord } from '@/lib/casino-data'
+import { getAvailableGames, getProgressionSnapshot, getWalletSnapshot, type GameRecord } from '@/lib/casino-data'
+import type { PlayerProgression } from '@/lib/progression'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Casino lobby | Fizz Casino' }
@@ -16,17 +17,33 @@ export default async function CasinoPage() {
     console.error('[v0] Casino catalog unavailable:', error instanceof Error ? error.message : 'unknown error')
   }
 
-  let currentPlayer: { id: string; name: string; email: string; balance: string | null; currency: string | null } | null = null
+  let currentPlayer: { id: string; name: string; email: string; balance: string | null; currency: string | null; progression: PlayerProgression } | null = null
   if (session?.user) {
-    currentPlayer = { id: session.user.id, name: session.user.name || '', email: session.user.email || '', balance: null, currency: null }
     try {
-      const wallet = await getWalletSnapshot(session.user.id)
-      currentPlayer.balance = wallet.balance
-      currentPlayer.currency = wallet.currency
+      const [wallet, progression] = await Promise.all([
+        getWalletSnapshot(session.user.id),
+        getProgressionSnapshot(session.user.id),
+      ])
+      currentPlayer = {
+        id: session.user.id,
+        name: session.user.name || '',
+        email: session.user.email || '',
+        balance: wallet.balance,
+        currency: wallet.currency,
+        progression,
+      }
     } catch (error) {
-      console.error('[v0] Lobby wallet unavailable:', error instanceof Error ? error.message : 'unknown error')
+      console.error('[v0] Lobby account data unavailable:', error instanceof Error ? error.message : 'unknown error')
+      currentPlayer = {
+        id: session.user.id,
+        name: session.user.name || '',
+        email: session.user.email || '',
+        balance: null,
+        currency: 'USD',
+        progression: { totalXp: 0, level: 1, xpIntoLevel: 0, xpForNextLevel: 100, progressPercent: 0 },
+      }
     }
   }
 
-  return <LobbyPage games={games} dataError={dataError} currentPlayer={currentPlayer} />
+  return <CasinoLobby games={games} dataError={dataError} currentPlayer={currentPlayer} />
 }
