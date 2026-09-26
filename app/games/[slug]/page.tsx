@@ -1,7 +1,8 @@
 import { notFound, redirect } from 'next/navigation'
 import { CasinoGameBoard } from '@/components/casino-game-board'
+import { VaultHeistGame } from '@/components/vault-heist-game'
 import { auth } from '@/lib/auth/server'
-import { getActiveCasinoRound, getBuiltInRtpSetting, supportedGameSlug } from '@/lib/casino-games'
+import { getActiveCasinoRound, getBuiltInRtpSetting, getVaultHeistConfiguration, getVaultHeistLeaderboard, supportedGameSlug } from '@/lib/casino-games'
 import { getWalletSnapshot } from '@/lib/casino-data'
 
 export const dynamic = 'force-dynamic'
@@ -13,6 +14,24 @@ export default async function GamePage({ params }: { params: Promise<{ slug: str
 
   const { data: session } = await auth.getSession()
   if (!session?.user) redirect(`/auth/sign-in?returnTo=/games/${rawSlug}`)
+
+  if (rawSlug === 'vault-heist') {
+    const [configuration, initialRound, wallet, leaderboard] = await Promise.all([
+      getVaultHeistConfiguration(),
+      getActiveCasinoRound(session.user.id, rawSlug),
+      getWalletSnapshot(session.user.id),
+      getVaultHeistLeaderboard(),
+    ])
+    return <VaultHeistGame
+      profiles={configuration.profiles}
+      initialProfileId={configuration.activeProfileId}
+      initialRound={initialRound}
+      initialBalance={wallet.balance}
+      currency={wallet.currency}
+      playerName={session.user.name || 'Player'}
+      leaderboard={leaderboard}
+    />
+  }
 
   const [settings, initialRound, wallet] = await Promise.all([
     getBuiltInRtpSetting(rawSlug),

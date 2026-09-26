@@ -53,16 +53,18 @@ type LobbyMessage = {
   createdAt: string
 }
 
-const supportedGames = new Set(['crash', 'mines', 'towers'])
+const supportedGames = new Set(['crash', 'mines', 'towers', 'vault-heist'])
 const gameArtwork: Record<string, string> = {
   crash: '/games/fizz-dice.png',
   mines: '/games/fizz-mines.png',
   towers: '/games/fizz-towers.png',
+  'vault-heist': '/games/vault-heist-bg.png',
 }
 const spotlights: Record<string, { eyebrow: string; title: string; detail: string }> = {
   crash: { eyebrow: 'Fizz originals', title: 'Ride the multiplier', detail: 'Cash out before the round ends.' },
   mines: { eyebrow: 'Fizz originals', title: 'Find the safe tiles', detail: 'Reveal gems and choose when to cash out.' },
   towers: { eyebrow: 'Fizz originals', title: 'Climb one row at a time', detail: 'Pick a safe column and keep climbing.' },
+  'vault-heist': { eyebrow: 'Fizz original · flagship', title: 'Vault Heist', detail: 'Crack the doors. Beat the alarm. Choose your escape.' },
 }
 
 const chatFetcher = async (url: string): Promise<LobbyMessage[]> => {

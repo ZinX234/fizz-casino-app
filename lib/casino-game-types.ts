@@ -1,4 +1,6 @@
-export type CasinoGameSlug = 'crash' | 'towers' | 'mines'
+import type { VaultHeistOutcome } from '@/lib/vault-heist-config'
+
+export type CasinoGameSlug = 'crash' | 'towers' | 'mines' | 'vault-heist'
 
 export type GameRoundView = {
   sessionId: string
@@ -19,6 +21,17 @@ export type GameRoundView = {
   crashPoint?: number
   cashoutMultiplier?: number
   fairness?: { serverSeed: string; clientSeed: string; commitment: string }
+  vaultHeist?: {
+    profileId: string
+    profileName: string
+    security: number
+    securityMax: number
+    currentMultiplier: number
+    maxMultiplier: number
+    masterKeyPending: boolean
+    revealedDoors: Array<{ position: number; outcome: VaultHeistOutcome; security: number; multiplier: number }>
+    allDoorOutcomes?: VaultHeistOutcome[]
+  }
 }
 
 export type GameRtpSetting = {

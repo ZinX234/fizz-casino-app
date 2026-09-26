@@ -5,6 +5,7 @@ import type { PoolClient } from 'pg'
 import { databasePool, withTransaction } from '@/lib/db'
 import type { CasinoGameSlug, GameRoundView, GameRtpSetting } from '@/lib/casino-game-types'
 import { xpForFizzcoinWager } from '@/lib/progression'
+import { assertVaultHeistConfig, cloneDefaultVaultHeistConfig, payoutMultiplierForVaultPick, sanitizeVaultHeistConfig, simulateVaultHeistCashoutAfterEverySafeDoor, type VaultHeistConfig, type VaultHeistOutcome, type VaultHeistProfile } from '@/lib/vault-heist-config'
 
 const OWNER_EMAIL = 'benarch80@gmail.com'
 const MIN_EDGE_BPS = 100
@@ -17,6 +18,7 @@ const gameCatalog: Array<{ slug: CasinoGameSlug; name: string; description: stri
   { slug: 'crash', name: 'Crash', description: 'Cash out before the multiplier crashes. The displayed RTP applies to new rounds.' },
   { slug: 'towers', name: 'Towers', description: 'Climb eight rows, choosing a safe column on each step.' },
   { slug: 'mines', name: 'Mines', description: 'Choose the mine count, reveal safe tiles, and cash out whenever you want.' },
+  { slug: 'vault-heist', name: 'Vault Heist', description: 'Crack a high-security vault, manage the alarm, and decide when to make your escape.' },
 ]
 
 export class CasinoGameError extends Error {
@@ -27,7 +29,7 @@ export class CasinoGameError extends Error {
 }
 
 function isGameSlug(value: string): value is CasinoGameSlug {
-  return value === 'crash' || value === 'towers' || value === 'mines'
+  return value === 'crash' || value === 'towers' || value === 'mines' || value === 'vault-heist'
 }
 
 function readHouseEdge(configuration: unknown) {
@@ -48,6 +50,13 @@ export async function ensureBuiltInGames() {
        WHERE NOT (public.games.configuration ? 'houseEdgeBps')`,
     [gameCatalog[0].description, gameCatalog[1].description, gameCatalog[2].description],
   )
+  await databasePool.query(
+    `INSERT INTO public.games (slug, name, provider, category, description, status, featured, configuration)
+     VALUES ('vault-heist', 'Vault Heist', 'Fizz Originals', 'other', $1, 'available', true, $2::jsonb)
+     ON CONFLICT (slug) DO UPDATE SET configuration = public.games.configuration || jsonb_build_object('vaultHeist', EXCLUDED.configuration->'vaultHeist')
+       WHERE NOT (public.games.configuration ? 'vaultHeist')`,
+    [gameCatalog[3].description, JSON.stringify({ houseEdgeBps: 400, vaultHeist: cloneDefaultVaultHeistConfig() })],
+  )
 }
 
 export async function getBuiltInRtpSettings(): Promise<GameRtpSetting[]> {
@@ -65,6 +74,85 @@ export async function getBuiltInRtpSettings(): Promise<GameRtpSetting[]> {
 export async function getBuiltInRtpSetting(slug: CasinoGameSlug): Promise<GameRtpSetting | null> {
   const settings = await getBuiltInRtpSettings()
   return settings.find((setting) => setting.slug === slug) ?? null
+}
+
+export async function getVaultHeistConfiguration(): Promise<VaultHeistConfig> {
+  await ensureBuiltInGames()
+  const { rows } = await databasePool.query<{ configuration: unknown }>(
+    `SELECT configuration FROM public.games WHERE slug = 'vault-heist' AND status = 'available' LIMIT 1`,
+  )
+  return sanitizeVaultHeistConfig(parseOutcome(rows[0]?.configuration).vaultHeist)
+}
+
+export async function updateVaultHeistConfiguration(actorUserId: string, configuration: VaultHeistConfig) {
+  try {
+    assertVaultHeistConfig(configuration)
+  } catch (error) {
+    throw new CasinoGameError(error instanceof Error ? error.message : 'Vault Heist settings are invalid.')
+  }
+  return withTransaction(async (client) => {
+    const { rows } = await client.query<{ id: string; configuration: unknown }>(
+      `SELECT id::text, configuration FROM public.games WHERE slug = 'vault-heist' FOR UPDATE`,
+    )
+    const game = rows[0]
+    if (!game) throw new CasinoGameError('Vault Heist settings were not found.', 404)
+    const previous = sanitizeVaultHeistConfig(parseOutcome(game.configuration).vaultHeist)
+    await client.query(
+      `UPDATE public.games SET configuration = configuration || jsonb_build_object('vaultHeist', $2::jsonb), updated_at = now() WHERE id = $1::uuid`,
+      [game.id, JSON.stringify(configuration)],
+    )
+    await client.query(
+      `INSERT INTO public.audit_logs (actor_user_id, action, entity_type, entity_id, details)
+       VALUES ($1, 'game.vault-heist.updated', 'game', $2, $3::jsonb)`,
+      [actorUserId, game.id, JSON.stringify({ previousProfileCount: previous.profiles.length, profileCount: configuration.profiles.length, activeProfileId: configuration.activeProfileId, theme: configuration.theme })],
+    )
+    return configuration
+  })
+}
+
+export function simulateVaultHeistProfile(profile: VaultHeistProfile) {
+  return simulateVaultHeistCashoutAfterEverySafeDoor(profile)
+}
+
+export async function getVaultHeistLeaderboard() {
+  const { rows } = await databasePool.query<{
+    today: { name: string; payout: string; multiplier: number } | null
+    all_time: { name: string; payout: string; multiplier: number } | null
+    highest_multiplier: { name: string; payout: string; multiplier: number } | null
+    longest_streak: { name: string; streak: number } | null
+    recent: Array<{ name: string; payout: string; multiplier: number; createdAt: string }>
+  }>(
+    `WITH escapes AS (
+       SELECT b.user_id, coalesce(nullif(u.name, ''), 'Player') AS name,
+              b.wager_amount::numeric AS wager, b.payout_amount::numeric AS payout,
+              coalesce((gr.outcome->>'cashoutMultiplier')::numeric, 1) AS multiplier,
+              b.created_at, gr.outcome->>'result' AS result
+       FROM public.bets b
+       JOIN public.game_sessions gs ON gs.id = b.game_session_id
+       JOIN public.games g ON g.id = b.game_id
+       JOIN public.game_results gr ON gr.bet_id = b.id
+       JOIN neon_auth."user" u ON u.id = b.user_id
+       WHERE g.slug = 'vault-heist' AND b.status = 'settled' AND b.payout_amount > 0
+     ), streak_rows AS (
+       SELECT name, result, row_number() OVER (PARTITION BY user_id ORDER BY created_at)
+         - row_number() OVER (PARTITION BY user_id, result ORDER BY created_at) AS streak_group
+       FROM escapes
+     ), streaks AS (
+       SELECT name, count(*)::int AS streak FROM streak_rows WHERE result = 'win'
+       GROUP BY name, streak_group ORDER BY streak DESC LIMIT 1
+     )
+     SELECT
+       (SELECT jsonb_build_object('name', name, 'payout', payout::text, 'multiplier', multiplier)
+        FROM escapes WHERE created_at >= date_trunc('day', now()) ORDER BY payout DESC LIMIT 1) AS today,
+       (SELECT jsonb_build_object('name', name, 'payout', payout::text, 'multiplier', multiplier)
+        FROM escapes ORDER BY payout DESC LIMIT 1) AS all_time,
+       (SELECT jsonb_build_object('name', name, 'payout', payout::text, 'multiplier', multiplier)
+        FROM escapes ORDER BY multiplier DESC, payout DESC LIMIT 1) AS highest_multiplier,
+       (SELECT jsonb_build_object('name', name, 'streak', streak) FROM streaks) AS longest_streak,
+       coalesce((SELECT jsonb_agg(jsonb_build_object('name', name, 'payout', payout::text, 'multiplier', multiplier, 'createdAt', created_at)
+         ORDER BY created_at DESC) FROM (SELECT * FROM escapes ORDER BY created_at DESC LIMIT 8) recent_escapes), '[]'::jsonb) AS recent`,
+  )
+  return rows[0] ?? { today: null, all_time: null, highest_multiplier: null, longest_streak: null, recent: [] }
 }
 
 export async function getCasinoAdminAccess(userId: string, sessionEmail: string | null | undefined) {
@@ -191,6 +279,26 @@ function makeCrashPoint(serverSeed: string, clientSeed: string, sessionId: strin
   return Math.min(CRASH_MAX_MULTIPLIER, Math.floor((rtp / (1 - unit)) * 100) / 100)
 }
 
+function makeVaultHeistDoorOutcomes(serverSeed: string, clientSeed: string, sessionId: string, profile: VaultHeistProfile) {
+  const outcomes = (Object.keys(profile.weights) as VaultHeistOutcome[])
+    .filter((outcome) => profile.enabled[outcome] && profile.weights[outcome] > 0)
+  const totalWeight = outcomes.reduce((total, outcome) => total + profile.weights[outcome], 0)
+  if (!totalWeight) throw new CasinoGameError('This Vault Heist profile has no weighted outcomes.', 409)
+  return Array.from({ length: 10 }, (_, position) => {
+    const ticket = deterministicInteger(serverSeed, `vault-heist:${clientSeed}:${sessionId}:${position}`, totalWeight)
+    let cumulative = 0
+    for (const outcome of outcomes) {
+      cumulative += profile.weights[outcome]
+      if (ticket < cumulative) return outcome
+    }
+    return outcomes[outcomes.length - 1]
+  })
+}
+
+function isHeistOutcome(value: unknown): value is VaultHeistOutcome {
+  return typeof value === 'string' && ['cash_bundle', 'gold_cache', 'diamond_briefcase', 'security_alert', 'guard_patrol', 'inside_informant', 'master_key', 'golden_vault', 'caught'].includes(value)
+}
+
 function parseOutcome(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new CasinoGameError('Round data is unavailable.', 500)
   return value as Record<string, unknown>
@@ -227,6 +335,24 @@ function roundView(row: Record<string, any>): GameRoundView {
   if (slug === 'crash' && settled) {
     view.crashPoint = Number(outcome.crashPoint)
     if (outcome.cashoutMultiplier !== undefined) view.cashoutMultiplier = Number(outcome.cashoutMultiplier)
+  }
+  if (slug === 'vault-heist') {
+    const snapshot = parseOutcome(outcome.vaultHeistSnapshot)
+    const revealedDoors = Array.isArray(outcome.revealedDoors)
+      ? outcome.revealedDoors.filter((door): door is { position: number; outcome: VaultHeistOutcome; security: number; multiplier: number } =>
+          Boolean(door && typeof door === 'object' && Number.isInteger(door.position) && isHeistOutcome(door.outcome) && Number.isInteger(door.security) && Number.isFinite(door.multiplier)))
+      : []
+    view.vaultHeist = {
+      profileId: String(snapshot.id),
+      profileName: String(snapshot.name),
+      security: Number(outcome.security ?? 0),
+      securityMax: Number(snapshot.securityMax),
+      currentMultiplier: Number(outcome.currentMultiplier ?? 1),
+      maxMultiplier: Number(snapshot.maxMultiplier),
+      masterKeyPending: outcome.masterKeyPending === true,
+      revealedDoors,
+      ...(settled && Array.isArray(outcome.doorOutcomes) ? { allDoorOutcomes: outcome.doorOutcomes.filter(isHeistOutcome) } : {}),
+    }
   }
   if (settled) {
     view.fairness = {
@@ -330,6 +456,7 @@ export async function startCasinoRound(input: {
   mineCount: number
   requestId: string
   expectedRtpBps: number
+  profileId?: string
 }): Promise<GameRoundView> {
   if (!isGameSlug(input.slug)) throw new CasinoGameError('Unknown game.', 404)
   if (!Number.isInteger(input.wagerCents) || input.wagerCents < 100 || input.wagerCents > MAX_WAGER_CENTS) {
@@ -371,7 +498,14 @@ export async function startCasinoRound(input: {
     if (Number(wallet.balance) < Number(wagerAmount)) throw new CasinoGameError('Your wallet balance is too low.', 409)
     await enforceResponsibleGaming(client, input.userId, Number(wagerAmount))
 
-    const houseEdgeBps = readHouseEdge(games[0].configuration)
+    const vaultHeistConfig = input.slug === 'vault-heist'
+      ? sanitizeVaultHeistConfig(parseOutcome(games[0].configuration).vaultHeist)
+      : null
+    const vaultHeistProfile = vaultHeistConfig
+      ? vaultHeistConfig.profiles.find((profile) => profile.id === (input.profileId ?? vaultHeistConfig.activeProfileId))
+      : null
+    if (input.slug === 'vault-heist' && !vaultHeistProfile) throw new CasinoGameError('Choose an available Vault Heist profile.', 409)
+    const houseEdgeBps = vaultHeistProfile ? 10_000 - vaultHeistProfile.rtpBps : readHouseEdge(games[0].configuration)
     const rtpBps = 10_000 - houseEdgeBps
     if (input.expectedRtpBps !== rtpBps) {
       throw new CasinoGameError(`Published RTP changed to ${(rtpBps / 100).toFixed(1)}% (house edge ${(houseEdgeBps / 100).toFixed(1)}%). Refresh this page to review the new settings before starting.`, 409)
@@ -407,6 +541,14 @@ export async function startCasinoRound(input: {
     }
     if (input.slug === 'towers') outcome.safeColumns = makeTowerColumns(serverSeed, clientSeed, session.id)
     if (input.slug === 'crash') outcome.crashPoint = makeCrashPoint(serverSeed, clientSeed, session.id, rtpBps)
+    if (input.slug === 'vault-heist' && vaultHeistProfile) {
+      outcome.vaultHeistSnapshot = vaultHeistProfile
+      outcome.security = 0
+      outcome.currentMultiplier = 1
+      outcome.masterKeyPending = false
+      outcome.revealedDoors = []
+      outcome.doorOutcomes = makeVaultHeistDoorOutcomes(serverSeed, clientSeed, session.id, vaultHeistProfile)
+    }
 
     await client.query(
       `INSERT INTO public.game_results (bet_id, outcome, payout_amount, server_seed_hash)
@@ -506,6 +648,63 @@ export async function playCasinoAction(input: {
     if (input.action === 'pick') {
       if (input.slug === 'crash') throw new CasinoGameError('Crash rounds use the cash-out action.')
       if (!Number.isInteger(input.position)) throw new CasinoGameError('Choose a valid game position.')
+      if (input.slug === 'vault-heist') {
+        const position = input.position!
+        if (position < 0 || position > 9) throw new CasinoGameError('Choose one of the ten vault doors.')
+        if (picks.includes(position)) throw new CasinoGameError('That vault door has already been opened.')
+        if (picks.length >= 10) throw new CasinoGameError('There are no more doors in this round.', 409)
+        const doorOutcomes = Array.isArray(outcome.doorOutcomes) ? outcome.doorOutcomes.filter(isHeistOutcome) : []
+        const vaultSnapshot = parseOutcome(outcome.vaultHeistSnapshot)
+        if (doorOutcomes.length !== 10) throw new CasinoGameError('The committed door sequence is unavailable.', 500)
+        const vaultOutcome = doorOutcomes[position]
+        const previousSecurity = Number(outcome.security ?? 0)
+        const maximumSecurity = Number(vaultSnapshot.securityMax)
+        const previousMultiplier = Number(outcome.currentMultiplier ?? 1)
+        const keyWasPending = outcome.masterKeyPending === true
+        let security = previousSecurity
+        let multiplier = previousMultiplier
+
+        picks.push(position)
+        outcome.picks = picks
+        if (vaultOutcome === 'caught') {
+          security = maximumSecurity
+        } else {
+          multiplier = payoutMultiplierForVaultPick(previousMultiplier, vaultOutcome, Number(vaultSnapshot.maxMultiplier))
+          if (vaultOutcome === 'inside_informant') security = Math.max(0, previousSecurity - 1)
+          else if (!keyWasPending) {
+            if (vaultOutcome === 'guard_patrol') security = previousSecurity + 2
+            else security = previousSecurity + 1
+          }
+          outcome.masterKeyPending = vaultOutcome === 'master_key'
+          if (keyWasPending && vaultOutcome === 'master_key') outcome.masterKeyPending = true
+        }
+
+        outcome.security = security
+        outcome.currentMultiplier = multiplier
+        const revealedDoors = Array.isArray(outcome.revealedDoors) ? outcome.revealedDoors : []
+        revealedDoors.push({ position, outcome: vaultOutcome, security, multiplier })
+        outcome.revealedDoors = revealedDoors
+        const captured = vaultOutcome === 'caught' || security >= maximumSecurity
+        if (captured) {
+          outcome.captureReason = vaultOutcome === 'caught' ? 'caught' : 'security'
+          await settleRound(client, row, input.userId, outcome, '0.00', 'loss')
+        } else if (picks.length === 10) {
+          const payoutCents = Math.floor(Number(row.wager_amount) * multiplier * 100 + 1e-8)
+          const payoutAmount = (payoutCents / 100).toFixed(2)
+          outcome.cashoutMultiplier = multiplier
+          await settleRound(client, row, input.userId, outcome, payoutAmount, 'win')
+        } else {
+          await client.query(`UPDATE public.game_results SET outcome = $2::jsonb WHERE bet_id = $1::uuid`, [row.bet_id, JSON.stringify(outcome)])
+        }
+
+        return roundView({
+          ...row,
+          bet_status: outcome.result ? 'settled' : 'pending',
+          session_status: outcome.result ? 'completed' : 'active',
+          payout_amount: String(outcome.payoutAmount ?? '0.00'),
+          outcome,
+        })
+      }
       if (input.slug === 'towers' && (input.position! < 0 || input.position! > 2)) throw new CasinoGameError('Choose one of the three columns.')
       if (input.slug === 'mines' && (input.position! < 0 || input.position! > 24)) throw new CasinoGameError('Choose a tile on the board.')
       if (input.slug === 'mines' && picks.includes(input.position!)) throw new CasinoGameError('You already chose that tile.')
@@ -548,6 +747,13 @@ export async function playCasinoAction(input: {
           const payoutCents = Math.floor(Number(row.wager_amount) * currentMultiplier * 100 + 1e-8)
           await settleRound(client, row, input.userId, outcome, (payoutCents / 100).toFixed(2), 'win')
         }
+      } else if (input.slug === 'vault-heist') {
+        if (!picks.length) throw new CasinoGameError('Open at least one vault door before making your escape.')
+        const multiplier = Number(outcome.currentMultiplier ?? 1)
+        const payoutCents = Math.floor(Number(row.wager_amount) * multiplier * 100 + 1e-8)
+        const payoutAmount = (payoutCents / 100).toFixed(2)
+        outcome.cashoutMultiplier = multiplier
+        await settleRound(client, row, input.userId, outcome, payoutAmount, 'win')
       } else {
         if (!picks.length) throw new CasinoGameError('Reveal at least one safe tile before cashing out.')
         const multiplier = multiplierForSafePicks(input.slug, picks.length, Number(outcome.mineCount ?? 0), Number(outcome.rtpBps))

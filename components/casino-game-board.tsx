@@ -6,7 +6,7 @@ import { ArrowLeft, Check, CircleHelp, ShieldCheck, TriangleAlert } from 'lucide
 import type { GameRoundView, GameRtpSetting } from '@/lib/casino-game-types'
 import { formatFizzcoins } from '@/lib/format-money'
 
-const gameNames = { crash: 'Crash', towers: 'Towers', mines: 'Mines' } as const
+const gameNames = { crash: 'Crash', towers: 'Towers', mines: 'Mines', 'vault-heist': 'Vault Heist' } as const
 
 type Props = {
   setting: GameRtpSetting

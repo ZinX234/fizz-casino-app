@@ -5,7 +5,7 @@ import { databasePool, consumeUserRateLimit } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 
 const requestSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('start'), requestId: z.string().uuid(), wagerCents: z.number().int(), mineCount: z.number().int().optional(), expectedRtpBps: z.number().int().min(9000).max(9900) }).strict(),
+  z.object({ action: z.literal('start'), requestId: z.string().uuid(), wagerCents: z.number().int(), mineCount: z.number().int().optional(), expectedRtpBps: z.number().int().min(9000).max(9900), profileId: z.string().regex(/^[a-z0-9][a-z0-9-]{1,39}$/).optional() }).strict(),
   z.object({ action: z.literal('pick'), sessionId: z.string().uuid(), position: z.number().int() }).strict(),
   z.object({ action: z.literal('cashout'), sessionId: z.string().uuid() }).strict(),
   z.object({ action: z.literal('resume') }).strict(),
@@ -50,6 +50,7 @@ export async function POST(request: Request, context: { params: Promise<{ slug: 
         mineCount: body.data.mineCount ?? 3,
         requestId: body.data.requestId,
         expectedRtpBps: body.data.expectedRtpBps,
+        profileId: body.data.profileId,
       })
     } else if (body.data.action === 'resume') {
       round = await getActiveCasinoRound(session.user.id, rawSlug)
