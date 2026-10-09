@@ -86,6 +86,10 @@ export async function ensureBuiltInGames() {
        END`,
     [gameCatalog[4].description, JSON.stringify({ sweetBonanza: cloneDefaultSweetBonanzaConfig() })],
   )
+  // Force update status and featured to ensure availability
+  await databasePool.query(
+    `UPDATE public.games SET status = 'available', featured = true, cover_image_url = '/games/sweet-bonanza/cover.png' WHERE slug = 'sweet-bonanza'`,
+  )
 }
 
 export async function getBuiltInRtpSettings(): Promise<GameRtpSetting[]> {
