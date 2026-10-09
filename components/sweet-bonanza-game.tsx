@@ -46,20 +46,6 @@ export function SweetBonanzaGame({
   error: string | null
   sendAction: (action: any) => Promise<any>
 }) {
-  round,
-  balance,
-  currency,
-  profiles,
-  error,
-  sendAction,
-}: {
-  round: { sessionId: string; status: string; payout: string; outcome: any } | null
-  balance: string
-  currency: string
-  profiles: SweetBonanzaProfile[]
-  error: string | null
-  sendAction: (action: any) => Promise<any>
-}) {
   const [wager, setWager] = useState('400')
   const [profileId, setProfileId] = useState(profiles[0]?.id ?? 'standard')
   const profile = profiles.find((item) => item.id === profileId) ?? profiles[0]
