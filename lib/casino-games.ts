@@ -68,15 +68,8 @@ export async function ensureBuiltInGames() {
     `INSERT INTO public.games (slug, name, provider, category, description, status, featured, cover_image_url, configuration)
      VALUES ('sweet-bonanza', 'Sweet Bonanza', 'Fizz Originals', 'slots', $1, 'available', true, '/games/sweet-bonanza/cover.png', $2::jsonb)
      ON CONFLICT (slug) DO UPDATE SET
-       status = 'available',
-       featured = true,
-       cover_image_url = '/games/sweet-bonanza/cover.png',
        configuration = public.games.configuration || jsonb_build_object('sweetBonanza', EXCLUDED.configuration->'sweetBonanza')`,
     [gameCatalog[4].description, JSON.stringify({ sweetBonanza: cloneDefaultSweetBonanzaConfig() })],
-  )
-  // Force update to ensure availability (always runs)
-  await databasePool.query(
-    `UPDATE public.games SET status = 'available', featured = true, cover_image_url = '/games/sweet-bonanza/cover.png' WHERE slug = 'sweet-bonanza'`,
   )
 }
 
