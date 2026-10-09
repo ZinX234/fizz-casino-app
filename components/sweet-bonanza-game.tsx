@@ -178,5 +178,3 @@ export function SweetBonanzaGame({
 }
 
 export default SweetBonanzaGame
-
-export default SweetBonanzaGame
