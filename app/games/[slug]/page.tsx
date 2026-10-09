@@ -37,20 +37,7 @@ export default async function GamePage({ params }: { params: Promise<{ slug: str
   }
 
   if (rawSlug === 'sweet-bonanza') {
-    const [configuration, initialRound, wallet, username] = await Promise.all([
-      getSweetBonanzaConfiguration(),
-      getActiveCasinoRound(session.user.id, rawSlug),
-      getWalletSnapshot(session.user.id),
-      getPlayerUsername(session.user.id),
-    ])
-    return <SweetBonanzaGame
-      profiles={configuration.profiles}
-      initialProfileId={configuration.activeProfileId}
-      initialRound={initialRound}
-      initialBalance={wallet.balance}
-      currency={wallet.currency}
-      playerName={username || session.user.name || 'Player'}
-    />
+    return <SweetBonanzaGame />
   }
 
   const [settings, initialRound, wallet, username] = await Promise.all([

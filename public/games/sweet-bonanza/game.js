@@ -10,7 +10,29 @@ const symbolFiles = {
   z: 'img/konZEL.png',
 };
 
+// These fixed boards are animation samples, not generated game outcomes.
+const sequences = [
+  [
+    ['g b h p s c', 'm a c b z p', 'p h g m a b', 'c z b g h m', 'b p s a g c'],
+    ['g b h p s c', 'm a c b z p', 'p h a m a b', 'c z b g h m', 'b p s a g c'],
+    ['g b h p s c', 'm a c b z p', 'p h z m g b', 'c z b g h m', 'b p s a g c'],
+  ],
+  [
+    ['a h s b p z', 'g m a c h b', 'p z g h s m', 'b c p a g z', 'h s m b c p'],
+    ['a h s b p z', 'g m a c h b', 'p z g h a m', 'b c p a g z', 'h s m b c p'],
+    ['a h s b p z', 'g m a c h b', 'p z g c a m', 'b c p a g z', 'h s m b c p'],
+  ],
+  [
+    ['z p g h a c', 'b s m p z g', 'h a c b p s', 'm g z h c a', 'p b h s m g'],
+    ['z p g h a c', 'b s m p z g', 'h a c b p s', 'm g z h a a', 'p b h s m g'],
+    ['z p g h a c', 'b s m p z g', 'h a c b p s', 'm g z c z a', 'p b h s m g'],
+  ],
+];
+const presetBoards = sequences.flat();
+
 const game = document.getElementById('game');
+const playButton = document.getElementById('play');
+let boardIndex = 0;
 let isAnimating = false;
 
 function renderBoard(rows, animate = false) {
@@ -39,31 +61,73 @@ function wait(milliseconds) {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
-// Export for React component to call
-window.game = {
-  spin: async function(outcome) {
-    if (isAnimating) return;
-    isAnimating = true;
+async function playOneBoard() {
+  if (isAnimating) return;
+  isAnimating = true;
+  playButton.disabled = true;
+  playButton.textContent = 'Playing…';
 
-    try {
+  const wagerInput = document.getElementById('wager');
+  const wager = wagerInput ? Number(wagerInput.value) : 400;
+
+  try {
+    // Call FizzCoins backend API
+    const response = await fetch('/api/games/sweet-bonanza/play', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'start',
+        requestId: crypto.randomUUID(),
+        wagerCents: wager / 4,
+        mineCount: 0,
+        expectedRtpBps: 9600,
+        profileId: 'standard',
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      alert(data.error || 'Spin failed');
+      playButton.textContent = 'Play';
+      playButton.disabled = false;
+      isAnimating = false;
+      return;
+    }
+
+    // Update balance display
+    const balanceDisplay = document.getElementById('balance-value');
+    if (balanceDisplay && data.wallet.balance) {
+      balanceDisplay.textContent = data.wallet.balance;
+    }
+
+    // Render the server-generated grid
+    const grid = data.round?.sweetBonanza?.grid;
+    if (grid) {
       game.classList.add('preview-changing');
       await wait(180);
-      
-      // Render the server-generated board
-      if (outcome && outcome.grid) {
-        renderBoard(outcome.grid, true);
-      }
-      
+      renderBoard(grid, true);
       game.classList.remove('preview-changing');
       await wait(720);
-    } finally {
-      game.classList.remove('preview-changing');
-      isAnimating = false;
     }
-  }
-};
 
-// Initialize with empty board
-renderBoard([
-  ['a b c g h', 'm p s z a', 'b c g h m', 'p s z a b', 'c g h m p']
-]);
+    // Show win if any
+    if (data.round.payout !== '0.00') {
+      const winDisplay = document.getElementById('win-value');
+      if (winDisplay) {
+        winDisplay.textContent = data.round.payout;
+      }
+    }
+  } catch (error) {
+    console.error('Spin failed:', error);
+    alert('Spin failed. Please try again.');
+  } finally {
+    game.classList.remove('preview-changing');
+    playButton.textContent = 'Play';
+    playButton.disabled = false;
+    isAnimating = false;
+  }
+}
+
+playButton.addEventListener('click', playOneBoard);
+renderBoard(presetBoards[0]);
