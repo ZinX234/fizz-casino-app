@@ -12,7 +12,7 @@ export function AdminGameSettings({ initialSettings }: { initialSettings: GameRt
 
   function updateHouseEdge(slug: GameRtpSetting['slug'], houseEdgeBps: number) {
     if (!Number.isFinite(houseEdgeBps)) return
-    const boundedEdge = Math.min(1000, Math.max(100, Math.round(houseEdgeBps / 10) * 10))
+    const boundedEdge = Math.min(9900, Math.max(100, Math.round(houseEdgeBps / 10) * 10))
     setSettings((current) => current.map((item) => item.slug === slug
       ? { ...item, houseEdgeBps: boundedEdge, rtpBps: 10_000 - boundedEdge }
       : item))
@@ -54,7 +54,7 @@ export function AdminGameSettings({ initialSettings }: { initialSettings: GameRt
   return (
     <section className="mt-8 rounded-[24px] border border-amber-100/10 bg-[#12141a] p-5 sm:p-7" aria-labelledby="game-settings-heading">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div><p className="eyebrow">Published odds</p><h2 id="game-settings-heading" className="mt-2 text-xl font-bold">Game RTP &amp; house edge</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-white/45">Set either value per game; changing one updates the other. Saved odds are public and logged, and apply only to rounds started after the save. Active rounds keep their original settings. Crash uses RTP in its crash-point distribution, Mines and Towers use it in cash-out multipliers, and Vault Heist scales payouts without changing door odds.</p></div>
+        <div><p className="eyebrow">Published odds</p><h2 id="game-settings-heading" className="mt-2 text-xl font-bold">Game RTP &amp; house edge</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-white/45">Set either value per game; changing one updates the other. RTP sets expected return, while house edge is its complement—not a separate volatility target. Saved odds apply only to new rounds; active rounds keep their original settings. Crash uses RTP in its crash-point distribution, Mines and Towers scale cash-out payouts using their actual safe-pick probabilities, and Vault Heist scales rewards without changing door odds.</p></div>
         <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/10 bg-emerald-200/[0.04] px-3 py-2 text-[11px] font-semibold text-emerald-100/70"><ShieldCheck aria-hidden="true" className="size-4" /> Server-enforced</div>
       </div>
       <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -68,20 +68,20 @@ export function AdminGameSettings({ initialSettings }: { initialSettings: GameRt
                 <div>
                   <label htmlFor={`${setting.slug}-edge`} className="text-xs text-white/50">House edge</label>
                   <div className="mt-2 flex items-center rounded-lg border border-white/10 bg-black/20 px-2.5 focus-within:border-amber-200/40">
-                    <input id={`${setting.slug}-edge`} type="number" min="1" max="10" step="0.1" value={(setting.houseEdgeBps / 100).toFixed(1)} onChange={(event) => updateHouseEdge(setting.slug, Number.parseFloat(event.target.value) * 100)} aria-label={`${setting.name} house edge percentage`} className="w-full bg-transparent py-2 text-sm font-bold tabular-nums text-white outline-none" />
+                    <input id={`${setting.slug}-edge`} type="number" min="1" max="99" step="0.1" value={(setting.houseEdgeBps / 100).toFixed(1)} onChange={(event) => updateHouseEdge(setting.slug, Number.parseFloat(event.target.value) * 100)} aria-label={`${setting.name} house edge percentage`} className="w-full bg-transparent py-2 text-sm font-bold tabular-nums text-white outline-none" />
                     <span className="text-xs text-white/40">%</span>
                   </div>
                 </div>
                 <div>
                   <label htmlFor={`${setting.slug}-rtp`} className="text-xs text-white/50">RTP</label>
                   <div className="mt-2 flex items-center rounded-lg border border-white/10 bg-black/20 px-2.5 focus-within:border-amber-200/40">
-                    <input id={`${setting.slug}-rtp`} type="number" min="90" max="99" step="0.1" value={(setting.rtpBps / 100).toFixed(1)} onChange={(event) => updateHouseEdge(setting.slug, 10_000 - Number.parseFloat(event.target.value) * 100)} aria-label={`${setting.name} RTP percentage`} className="w-full bg-transparent py-2 text-sm font-bold tabular-nums text-white outline-none" />
+                    <input id={`${setting.slug}-rtp`} type="number" min="1" max="99" step="0.1" value={(setting.rtpBps / 100).toFixed(1)} onChange={(event) => updateHouseEdge(setting.slug, 10_000 - Number.parseFloat(event.target.value) * 100)} aria-label={`${setting.name} RTP percentage`} className="w-full bg-transparent py-2 text-sm font-bold tabular-nums text-white outline-none" />
                     <span className="text-xs text-white/40">%</span>
                   </div>
                 </div>
               </div>
-              <input id={`${setting.slug}-edge-slider`} type="range" min="100" max="1000" step="10" value={setting.houseEdgeBps} aria-label={`${setting.name} house edge slider`} aria-valuetext={`${(setting.houseEdgeBps / 100).toFixed(1)}% house edge`} onChange={(event) => updateHouseEdge(setting.slug, Number(event.target.value))} className="mt-4 h-2 w-full cursor-pointer accent-[#f4bc63]" />
-              <div className="mt-2 flex justify-between text-[10px] text-white/35"><span>1% edge · 99% RTP</span><span>10% edge · 90% RTP</span></div>
+              <input id={`${setting.slug}-edge-slider`} type="range" min="100" max="9900" step="10" value={setting.houseEdgeBps} aria-label={`${setting.name} house edge slider`} aria-valuetext={`${(setting.houseEdgeBps / 100).toFixed(1)}% house edge`} onChange={(event) => updateHouseEdge(setting.slug, Number(event.target.value))} className="mt-4 h-2 w-full cursor-pointer accent-[#f4bc63]" />
+              <div className="mt-2 flex justify-between text-[10px] text-white/35"><span>1% edge · 99% RTP</span><span>99% edge · 1% RTP</span></div>
               <div className="mt-5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-3">
                 <div className="flex items-center justify-between"><span className="text-xs text-white/45">Currently published</span><span className="text-sm font-bold tabular-nums text-white">{(published.houseEdgeBps / 100).toFixed(1)}% edge</span></div>
                 <p className="mt-1 text-xs tabular-nums text-amber-100/80">{(published.rtpBps / 100).toFixed(1)}% RTP</p>
@@ -93,7 +93,7 @@ export function AdminGameSettings({ initialSettings }: { initialSettings: GameRt
           )
         })}
       </div>
-      <p className="mt-4 text-[11px] leading-5 text-white/35">House edge is bounded to 1.0%–10.0% in 0.1% increments. RTP is the complementary value. Changes apply globally to new rounds only; no player-specific or active-round targeting.</p>
+      <p className="mt-4 text-[11px] leading-5 text-white/35">House edge is bounded to 1.0%–99.0% in 0.1% increments. RTP can be set as low as 1.0% and is the complement of house edge. Changes apply globally to new rounds only; no player-specific or active-round targeting.</p>
     </section>
   )
 }

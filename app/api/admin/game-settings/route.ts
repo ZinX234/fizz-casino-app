@@ -3,11 +3,9 @@ import { auth } from '@/lib/auth/server'
 import { CasinoGameError, getCasinoAdminAccess, supportedGameSlug, updateBuiltInHouseEdge } from '@/lib/casino-games'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 
-export const dynamic = 'force-dynamic'
-
 const updateSchema = z.object({
   slug: z.enum(['crash', 'towers', 'mines', 'vault-heist']),
-  houseEdgeBps: z.number().int().min(100).max(1000).multipleOf(10),
+  houseEdgeBps: z.number().int().min(100).max(9900).multipleOf(10),
 }).strict()
 
 export async function POST(request: Request) {
@@ -25,7 +23,7 @@ export async function POST(request: Request) {
     }
     const body = updateSchema.safeParse(await request.json())
     if (!body.success || !supportedGameSlug(body.data?.slug ?? '')) {
-      return Response.json({ error: 'Choose a valid game and a house edge from 1% to 10%.' }, { status: 400 })
+      return Response.json({ error: 'Choose a valid game and a house edge from 1% to 99%.' }, { status: 400 })
     }
     const settings = await updateBuiltInHouseEdge(session.user.id, body.data.slug, body.data.houseEdgeBps)
     return Response.json({ settings })

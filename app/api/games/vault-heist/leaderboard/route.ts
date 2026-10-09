@@ -2,8 +2,6 @@ import { auth } from '@/lib/auth/server'
 import { getVaultHeistLeaderboard } from '@/lib/casino-games'
 import { consumeUserRateLimit } from '@/lib/db'
 
-export const dynamic = 'force-dynamic'
-
 export async function GET() {
   const { data: session } = await auth.getSession()
   if (!session?.user) return Response.json({ error: 'Sign in to view Vault Heist live results.' }, { status: 401 })

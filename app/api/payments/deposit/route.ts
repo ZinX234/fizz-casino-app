@@ -4,8 +4,6 @@ import { auth } from '@/lib/auth/server'
 import { consumeUserRateLimit, databasePool, withTransaction } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 
-export const dynamic = 'force-dynamic'
-
 const depositSchema = z.object({
   amount: z.string().trim().max(8).regex(/^\d{1,5}(?:\.\d{1,2})?$/, 'Enter an amount with up to two decimal places.'),
 })

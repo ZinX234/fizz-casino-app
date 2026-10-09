@@ -3,8 +3,6 @@ import { auth } from '@/lib/auth/server'
 import { consumeUserRateLimit, databasePool, withTransaction } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 
-export const dynamic = 'force-dynamic'
-
 const requestSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('create_rain'), amount: z.string().trim().max(8).regex(/^\d{1,5}(?:\.\d{1,2})?$/), durationSeconds: z.number().int().min(60).max(120), requestId: z.string().uuid() }).strict(),
   z.object({ action: z.literal('join_rain'), rainId: z.string().uuid() }).strict(),

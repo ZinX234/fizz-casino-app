@@ -4,8 +4,6 @@ import { getCasinoAdminAccess } from '@/lib/casino-games'
 import { databasePool, withTransaction } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 
-export const dynamic = 'force-dynamic'
-
 const reviewSchema = z.object({
   requestId: z.string().uuid(),
   action: z.enum(['approve', 'reject']),
