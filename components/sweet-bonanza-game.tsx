@@ -50,7 +50,7 @@ export function SweetBonanzaGame({
   const [wager, setWager] = useState('400')
   const [profileId, setProfileId] = useState(profiles[0]?.id ?? 'standard')
   const profile = profiles.find((item) => item.id === profileId) ?? profiles[0]
-  const sweetBonanza = round?.outcome ? (round.outcome as any).sweetBonanzaSnapshot : null
+  const sweetBonanza = round?.sweetBonanza ?? null
   const grid = sweetBonanza?.grid ?? Array(5).fill(Array(6).fill('a'))
   const isSpinning = round?.status === 'active'
 
