@@ -120,6 +120,7 @@ export default function SweetBonanzaGame() {
   return (
     <div className="relative w-full h-screen flex items-center justify-center" style={{ background: 'url(/games/sweet-bonanza/фон.png) no-repeat center center', backgroundSize: 'cover' }}>
       <div id="site-fixed-container">
+        <div id="title" style={{ position: 'absolute', top: '0', left: '50%', transform: 'translateX(-50%)', width: '480px', height: '90px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: '900', color: '#ffe066', textShadow: '0 0 20px #ffb300, 0 0 40px #ff0000', letterSpacing: '4px' }}>SWEET BONANZA</div>
         <div id="game-wrapper">
           <div id="game"></div>
         </div>
