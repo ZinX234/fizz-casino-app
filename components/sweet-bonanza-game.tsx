@@ -133,7 +133,7 @@ export default function SweetBonanzaGame() {
           min="400" 
           max="40000" 
           step="4"
-          className="hidden"
+          style={{ position: 'fixed', bottom: '140px', left: '32px', padding: '8px 28px', borderRadius: '20px', border: '3px solid #ffe066', background: 'linear-gradient(90deg, #2c2c2c 0%, #3a2d0b 50%, #2c2c2c 100%)', color: '#ffe066', fontSize: '26px', fontWeight: '900', textAlign: 'center', letterSpacing: '2px', boxShadow: '0 0 16px 2px rgba(255,179,0,0.35)', outline: 'none' }}
         />
         <button id="play">Play</button>
         <div id="fizzcoins-balance">
