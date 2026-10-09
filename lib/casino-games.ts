@@ -49,25 +49,41 @@ export async function ensureBuiltInGames() {
        ('crash', 'Crash', 'Fizz Originals', 'other', $1, 'available', true, '{"houseEdgeBps":200}'::jsonb),
        ('towers', 'Towers', 'Fizz Originals', 'other', $2, 'available', true, '{"houseEdgeBps":200}'::jsonb),
        ('mines', 'Mines', 'Fizz Originals', 'other', $3, 'available', true, '{"houseEdgeBps":200}'::jsonb)
-     ON CONFLICT (slug) DO UPDATE SET configuration = public.games.configuration || EXCLUDED.configuration
-       WHERE NOT (public.games.configuration ? 'houseEdgeBps')`,
+     ON CONFLICT (slug) DO UPDATE SET
+       status = 'available',
+       featured = true,
+       configuration = CASE
+         WHEN NOT (public.games.configuration ? 'houseEdgeBps')
+         THEN public.games.configuration || EXCLUDED.configuration
+         ELSE public.games.configuration
+       END`,
     [gameCatalog[0].description, gameCatalog[1].description, gameCatalog[2].description],
   )
   await databasePool.query(
     `INSERT INTO public.games (slug, name, provider, category, description, status, featured, configuration)
      VALUES ('vault-heist', 'Vault Heist', 'Fizz Originals', 'other', $1, 'available', true, $2::jsonb)
-     ON CONFLICT (slug) DO UPDATE SET configuration = public.games.configuration || jsonb_build_object('vaultHeist', EXCLUDED.configuration->'vaultHeist')
-       WHERE NOT (public.games.configuration ? 'vaultHeist')`,
+     ON CONFLICT (slug) DO UPDATE SET
+       status = 'available',
+       featured = true,
+       configuration = CASE
+         WHEN NOT (public.games.configuration ? 'vaultHeist')
+         THEN public.games.configuration || jsonb_build_object('vaultHeist', EXCLUDED.configuration->'vaultHeist')
+         ELSE public.games.configuration
+       END`,
     [gameCatalog[3].description, JSON.stringify({ houseEdgeBps: 400, vaultHeist: cloneDefaultVaultHeistConfig() })],
   )
   await databasePool.query(
-    `INSERT INTO public.games (slug, name, provider, category, description, status, featured, configuration)
-     VALUES ('sweet-bonanza', 'Sweet Bonanza', 'Fizz Originals', 'slots', $1, 'available', true, $2::jsonb)
+    `INSERT INTO public.games (slug, name, provider, category, description, status, featured, cover_image_url, configuration)
+     VALUES ('sweet-bonanza', 'Sweet Bonanza', 'Fizz Originals', 'slots', $1, 'available', true, '/games/sweet-bonanza/cover.png', $2::jsonb)
      ON CONFLICT (slug) DO UPDATE SET
-       status = EXCLUDED.status,
-       featured = EXCLUDED.featured,
-       configuration = public.games.configuration || jsonb_build_object('sweetBonanza', EXCLUDED.configuration->'sweetBonanza')
-       WHERE NOT (public.games.configuration ? 'sweetBonanza')`,
+       status = 'available',
+       featured = true,
+       cover_image_url = '/games/sweet-bonanza/cover.png',
+       configuration = CASE
+         WHEN NOT (public.games.configuration ? 'sweetBonanza')
+         THEN public.games.configuration || jsonb_build_object('sweetBonanza', EXCLUDED.configuration->'sweetBonanza')
+         ELSE public.games.configuration
+       END`,
     [gameCatalog[4].description, JSON.stringify({ sweetBonanza: cloneDefaultSweetBonanzaConfig() })],
   )
 }
