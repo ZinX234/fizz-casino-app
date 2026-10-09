@@ -63,7 +63,10 @@ export async function ensureBuiltInGames() {
   await databasePool.query(
     `INSERT INTO public.games (slug, name, provider, category, description, status, featured, configuration)
      VALUES ('sweet-bonanza', 'Sweet Bonanza', 'Fizz Originals', 'slots', $1, 'available', true, $2::jsonb)
-     ON CONFLICT (slug) DO UPDATE SET configuration = public.games.configuration || jsonb_build_object('sweetBonanza', EXCLUDED.configuration->'sweetBonanza')
+     ON CONFLICT (slug) DO UPDATE SET
+       status = EXCLUDED.status,
+       featured = EXCLUDED.featured,
+       configuration = public.games.configuration || jsonb_build_object('sweetBonanza', EXCLUDED.configuration->'sweetBonanza')
        WHERE NOT (public.games.configuration ? 'sweetBonanza')`,
     [gameCatalog[4].description, JSON.stringify({ sweetBonanza: cloneDefaultSweetBonanzaConfig() })],
   )
