@@ -6,7 +6,7 @@ import { databasePool, withTransaction } from '@/lib/db'
 import type { CasinoGameSlug, GameRoundView, GameRtpSetting } from '@/lib/casino-game-types'
 import { xpForFizzcoinWager } from '@/lib/progression'
 import { assertVaultHeistConfig, cloneDefaultVaultHeistConfig, payoutMultiplierForRtp, payoutMultiplierForVaultPick, sanitizeVaultHeistConfig, type VaultHeistConfig, type VaultHeistOutcome, type VaultHeistProfile } from '@/lib/vault-heist-config'
-import { assertSweetBonanzaConfig, cloneDefaultSweetBonanzaConfig, sanitizeSweetBonanzaConfig, type SweetBonanzaConfig, type SweetBonanzaProfile, type SweetBonanzaSymbol } from '@/lib/sweet-bonanza-config'
+import { sanitizeSweetBonanzaConfig, type SweetBonanzaConfig, type SweetBonanzaProfile, type SweetBonanzaSymbol } from '@/lib/sweet-bonanza-config'
 import { calculatePayoutForRtp, calculateSlotWin, generateWeightedSlotGrid } from '@/lib/sweet-bonanza-math'
 
 export const CASINO_OWNER_EMAIL = 'benarch80@gmail.com'
@@ -21,7 +21,6 @@ const gameCatalog: Array<{ slug: CasinoGameSlug; name: string; description: stri
   { slug: 'towers', name: 'Towers', description: 'Climb eight rows, choosing a safe column on each step.' },
   { slug: 'mines', name: 'Mines', description: 'Choose the mine count, reveal safe tiles, and cash out whenever you want.' },
   { slug: 'vault-heist', name: 'Vault Heist', description: 'Crack a high-security vault, manage the alarm, and decide when to make your escape.' },
-  { slug: 'sweet-bonanza', name: 'Sweet Bonanza', description: 'Match 8+ symbols across the 6x5 grid to win. Weighted symbol frequencies and RTP-controlled payouts.' },
 ]
 
 export class CasinoGameError extends Error {
@@ -65,11 +64,8 @@ export async function ensureBuiltInGames() {
     [gameCatalog[3].description, JSON.stringify({ houseEdgeBps: 400, vaultHeist: cloneDefaultVaultHeistConfig() })],
   )
   await databasePool.query(
-    `INSERT INTO public.games (slug, name, provider, category, description, status, featured, cover_image_url, configuration)
-     VALUES ('sweet-bonanza', 'Sweet Bonanza', 'Fizz Originals', 'slots', $1, 'available', true, '/games/sweet-bonanza/cover.png', $2::jsonb)
-     ON CONFLICT (slug) DO UPDATE SET
-       configuration = public.games.configuration || jsonb_build_object('sweetBonanza', EXCLUDED.configuration->'sweetBonanza')`,
-    [gameCatalog[4].description, JSON.stringify({ sweetBonanza: cloneDefaultSweetBonanzaConfig() })],
+    `UPDATE public.games SET status = 'maintenance', featured = false
+     WHERE slug = 'sweet-bonanza'`,
   )
 }
 
@@ -83,10 +79,8 @@ export async function getBuiltInRtpSettings(): Promise<GameRtpSetting[]> {
   return rows.filter((row) => isGameSlug(row.slug)).map((row) => {
     const configuration = parseOutcome(row.configuration)
     const vaultConfiguration = row.slug === 'vault-heist' ? sanitizeVaultHeistConfig(configuration.vaultHeist) : null
-    const sweetBonanzaConfiguration = row.slug === 'sweet-bonanza' ? sanitizeSweetBonanzaConfig(configuration.sweetBonanza) : null
     const vaultProfile = vaultConfiguration?.profiles.find((profile) => profile.id === vaultConfiguration.activeProfileId)
-    const sweetBonanzaProfile = sweetBonanzaConfiguration?.profiles.find((profile) => profile.id === sweetBonanzaConfiguration.activeProfileId)
-    const rtpBps = vaultProfile?.rtpBps ?? sweetBonanzaProfile?.rtpBps ?? (10_000 - readHouseEdge(row.configuration))
+    const rtpBps = vaultProfile?.rtpBps ?? (10_000 - readHouseEdge(row.configuration))
     return { slug: row.slug, name: row.name, houseEdgeBps: 10_000 - rtpBps, rtpBps }
   })
 }
@@ -169,40 +163,6 @@ export async function getVaultHeistLeaderboard() {
          ORDER BY created_at DESC) FROM (SELECT * FROM escapes ORDER BY created_at DESC LIMIT 8) recent_escapes), '[]'::jsonb) AS recent`,
   )
   return rows[0] ?? { today: null, all_time: null, highest_multiplier: null, longest_streak: null, recent: [] }
-}
-
-export async function getSweetBonanzaConfiguration(): Promise<SweetBonanzaConfig> {
-  await ensureBuiltInGames()
-  const { rows } = await databasePool.query<{ configuration: unknown }>(
-    `SELECT configuration FROM public.games WHERE slug = 'sweet-bonanza' AND status = 'available' LIMIT 1`,
-  )
-  return sanitizeSweetBonanzaConfig(parseOutcome(rows[0]?.configuration).sweetBonanza)
-}
-
-export async function updateSweetBonanzaConfiguration(actorUserId: string, configuration: SweetBonanzaConfig) {
-  try {
-    assertSweetBonanzaConfig(configuration)
-  } catch (error) {
-    throw new CasinoGameError(error instanceof Error ? error.message : 'Sweet Bonanza settings are invalid.')
-  }
-  return withTransaction(async (client) => {
-    const { rows } = await client.query<{ id: string; configuration: unknown }>(
-      `SELECT id::text, configuration FROM public.games WHERE slug = 'sweet-bonanza' FOR UPDATE`,
-    )
-    const game = rows[0]
-    if (!game) throw new CasinoGameError('Sweet Bonanza settings were not found.', 404)
-    const previous = sanitizeSweetBonanzaConfig(parseOutcome(game.configuration).sweetBonanza)
-    await client.query(
-      `UPDATE public.games SET configuration = configuration || jsonb_build_object('sweetBonanza', $2::jsonb), updated_at = now() WHERE id = $1::uuid`,
-      [game.id, JSON.stringify(configuration)],
-    )
-    await client.query(
-      `INSERT INTO public.audit_logs (actor_user_id, action, entity_type, entity_id, details)
-       VALUES ($1, 'game.sweet-bonanza.updated', 'game', $2, $3::jsonb)`,
-      [actorUserId, game.id, JSON.stringify({ previousProfileCount: previous.profiles.length, profileCount: configuration.profiles.length, activeProfileId: configuration.activeProfileId })],
-    )
-    return configuration
-  })
 }
 
 export async function getCasinoAdminAccess(userId: string, sessionEmail: string | null | undefined) {
