@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Clock, Zap } from 'lucide-react'
 import { formatFizzcoins } from '@/lib/format-money'
 import type { SweetBonanzaConfig, SweetBonanzaProfile, SweetBonanzaSymbol } from '@/lib/sweet-bonanza-config'
+import type { GameRoundView } from '@/lib/casino-game-types'
 
 const SYMBOL_NAMES: Record<SweetBonanzaSymbol, string> = {
   a: 'Apple',
@@ -39,7 +40,7 @@ export function SweetBonanzaGame({
   error,
   sendAction,
 }: {
-  round: { sessionId: string; status: string; payout: string; outcome: any } | null
+  round: GameRoundView | null
   balance: string
   currency: string
   profiles: SweetBonanzaProfile[]
@@ -49,7 +50,7 @@ export function SweetBonanzaGame({
   const [wager, setWager] = useState('400')
   const [profileId, setProfileId] = useState(profiles[0]?.id ?? 'standard')
   const profile = profiles.find((item) => item.id === profileId) ?? profiles[0]
-  const sweetBonanza = round?.outcome?.sweetBonanzaSnapshot
+  const sweetBonanza = round?.outcome ? (round.outcome as any).sweetBonanzaSnapshot : null
   const grid = sweetBonanza?.grid ?? Array(5).fill(Array(6).fill('a'))
   const isSpinning = round?.status === 'active'
 
@@ -79,7 +80,7 @@ export function SweetBonanzaGame({
           {round?.status === 'settled' ? (
             <span className="flex items-center gap-1.5">
               <Clock aria-hidden="true" className="size-3" />
-              {new Date(round.sessionId as string).toLocaleTimeString()}
+              {new Date(round.startedAt).toLocaleTimeString()}
             </span>
           ) : (
             'RTP: 96%'
@@ -175,5 +176,7 @@ export function SweetBonanzaGame({
     </div>
   )
 }
+
+export default SweetBonanzaGame
 
 export default SweetBonanzaGame
