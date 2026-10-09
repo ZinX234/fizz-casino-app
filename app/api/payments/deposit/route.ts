@@ -8,21 +8,22 @@ const depositSchema = z.object({
   amount: z.string().trim().max(8).regex(/^\d{1,5}(?:\.\d{1,2})?$/, 'Enter an amount with up to two decimal places.'),
 })
 
-const payMeGateOrderSchema = z.object({
+const rampexPaymentLinkSchema = z.object({
+  success: z.boolean().optional(),
   data: z.object({
-    orderUUID: z.string().uuid(),
-    externalId: z.string().nullable(),
-    amount: z.string(),
-    currency: z.string(),
-    status: z.enum(['UNPAID', 'PAID', 'FAILED', 'EXPIRED', 'CANCELLED']),
-    checkoutUrl: z.string().url(),
-    expiresAt: z.string().datetime().optional(),
-  }),
-})
+    link_id: z.string().min(1).max(200).optional(),
+    payment_url: z.string().url().optional(),
+    redirect_url: z.string().url().optional(),
+    short_url: z.string().url().optional(),
+  }).passthrough().optional(),
+  link_id: z.string().min(1).max(200).optional(),
+  payment_url: z.string().url().optional(),
+  redirect_url: z.string().url().optional(),
+  short_url: z.string().url().optional(),
+}).passthrough()
 
 const MIN_DEPOSIT_CENTS = 200
 const MAX_DEPOSIT_CENTS = 1_000_000
-const CHECKOUT_EXPIRY_MINUTES = 30
 const APP_ORIGIN = 'https://v0-playfizz.vercel.app'
 
 class DepositPolicyError extends Error {
@@ -48,7 +49,7 @@ function getBackUrl() {
 function isTrustedCheckoutUrl(value: string) {
   try {
     const url = new URL(value)
-    return url.protocol === 'https:' && ['paymegate.com', 'www.paymegate.com'].includes(url.hostname)
+    return url.protocol === 'https:' && ['checkout.rampex.io', 'rampex.io', 'www.rampex.io'].includes(url.hostname)
   } catch {
     return false
   }
@@ -62,11 +63,11 @@ export async function POST(request: Request) {
   const { data: session } = await auth.getSession()
   if (!session?.user) return Response.json({ error: 'Authentication required.' }, { status: 401 })
 
-  const apiKey = process.env.PAYMEGATE_API_KEY?.trim()
-  const webhookSecret = process.env.PAYMEGATE_WEBHOOK_SECRET?.trim()
+  const apiKey = process.env.RAMPEX_API_KEY?.trim()
+  const webhookSecret = process.env.RAMPEX_WEBHOOK_SECRET?.trim()
   if (!apiKey || !webhookSecret) {
     return Response.json(
-      { error: 'Secure PayMeGate deposits are not configured yet.', code: 'PAYMENT_PROVIDER_UNAVAILABLE' },
+      { error: 'Secure Rampex deposits are not configured yet.', code: 'PAYMENT_PROVIDER_UNAVAILABLE' },
       { status: 503 },
     )
   }
@@ -104,7 +105,6 @@ export async function POST(request: Request) {
 
   const depositId = randomUUID()
   const amount = formatCents(amountCents)
-  const expiresAt = new Date(Date.now() + CHECKOUT_EXPIRY_MINUTES * 60_000)
 
   let wallet: { id: string; currency: string }
   try {
@@ -170,9 +170,9 @@ export async function POST(request: Request) {
       await client.query(
         `INSERT INTO public.deposits (
            id, user_id, wallet_id, provider, external_transaction_id,
-           amount, currency, status, expires_at
-         ) VALUES ($1::uuid, $2::uuid, $3::uuid, 'paymegate', $1, $4::numeric, $5, 'pending', $6)`,
-        [depositId, session.user.id, accountWallet.id, amount, accountWallet.currency, expiresAt],
+             amount, currency, status
+           ) VALUES ($1::uuid, $2::uuid, $3::uuid, 'rampex', $1, $4::numeric, $5, 'pending')`,
+        [depositId, session.user.id, accountWallet.id, amount, accountWallet.currency],
       )
       return accountWallet
     })
@@ -180,28 +180,26 @@ export async function POST(request: Request) {
     if (error instanceof DepositPolicyError) {
       return Response.json({ error: error.message }, { status: error.status })
     }
-    console.error('[v0] PayMeGate deposit reservation failed:', error instanceof Error ? error.message : 'unknown error')
+    console.error('[v0] Rampex deposit reservation failed:', error instanceof Error ? error.message : 'unknown error')
     return Response.json({ error: 'Could not start a deposit. Please try again later.' }, { status: 500 })
   }
 
   let providerResponse: Response
   try {
-    providerResponse = await fetch('https://www.paymegate.com/api/v1/orders', {
+    providerResponse = await fetch('https://api.rampex.io/api-create-payment-link', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-API-Key': apiKey,
       },
       body: JSON.stringify({
-        amount,
+        amount: Number(amount),
         currency: wallet.currency,
-        paymentMethodsKeys: ['*'],
-        customer: { email: session.user.email, fullName: session.user.name || undefined },
-        externalId: depositId,
+        customer_email: session.user.email,
         description: `Fizz Casino wallet deposit ${depositId}`,
-        backUrl: getBackUrl(),
-        expiresAt: expiresAt.toISOString(),
-        metadata: { depositId },
+        provider: 'hosted',
+        payment_url: getBackUrl(),
+        woo_order_id: depositId,
       }),
       signal: AbortSignal.timeout(15_000),
     })
@@ -209,14 +207,14 @@ export async function POST(request: Request) {
     try {
       await databasePool.query(
         `UPDATE public.deposits SET status = 'failed', updated_at = now()
-         WHERE id = $1::uuid AND status = 'pending'`,
+         WHERE id = $1::uuid AND provider = 'rampex' AND status = 'pending'`,
         [depositId],
       )
     } catch {
-      console.error('[v0] PayMeGate deposit reservation could not be marked failed after a request error.')
+      console.error('[v0] Rampex deposit reservation could not be marked failed after a request error.')
     }
-    console.error('[v0] PayMeGate checkout request failed:', error instanceof Error ? error.name : 'unknown error')
-    return Response.json({ error: 'PayMeGate could not start checkout. Please try again later.' }, { status: 502 })
+    console.error('[v0] Rampex checkout request failed:', error instanceof Error ? error.name : 'unknown error')
+    return Response.json({ error: 'Rampex could not start checkout. Please try again later.' }, { status: 502 })
   }
 
   let providerPayload: unknown
@@ -226,32 +224,26 @@ export async function POST(request: Request) {
     providerPayload = null
   }
 
-  const order = payMeGateOrderSchema.safeParse(providerPayload)
-  const returnedCents = order.success ? parseCents(order.data.data.amount) : null
-  if (
-    !providerResponse.ok ||
-    !order.success ||
-    !isTrustedCheckoutUrl(order.data.data.checkoutUrl) ||
-    order.data.data.externalId !== depositId ||
-    returnedCents !== amountCents ||
-    order.data.data.currency !== wallet.currency ||
-    order.data.data.status !== 'UNPAID'
-  ) {
+  const paymentLink = rampexPaymentLinkSchema.safeParse(providerPayload)
+  const paymentLinkData = paymentLink.success ? paymentLink.data.data ?? paymentLink.data : null
+  const linkId = paymentLinkData?.link_id
+  const checkoutUrl = paymentLinkData?.payment_url ?? paymentLinkData?.redirect_url ?? paymentLinkData?.short_url
+  if (!providerResponse.ok || !paymentLink.success || paymentLink.data.success === false || !linkId || !checkoutUrl || !isTrustedCheckoutUrl(checkoutUrl)) {
     await databasePool.query(
       `UPDATE public.deposits SET status = 'failed', updated_at = now()
-       WHERE id = $1::uuid AND status = 'pending'`,
+       WHERE id = $1::uuid AND provider = 'rampex' AND status = 'pending'`,
       [depositId],
     )
-    console.error('[v0] PayMeGate returned an invalid or unsuccessful checkout response:', providerResponse.status)
-    return Response.json({ error: 'PayMeGate could not start a verified checkout. Please try again later.' }, { status: 502 })
+    console.error('[v0] Rampex returned an invalid or unsuccessful payment link:', providerResponse.status)
+    return Response.json({ error: 'Rampex could not start a verified checkout. Please try again later.' }, { status: 502 })
   }
 
   await databasePool.query(
     `UPDATE public.deposits
      SET provider_order_id = $2, checkout_url = $3, updated_at = now()
-     WHERE id = $1::uuid AND status = 'pending'`,
-    [depositId, order.data.data.orderUUID, order.data.data.checkoutUrl],
+     WHERE id = $1::uuid AND provider = 'rampex' AND status = 'pending'`,
+    [depositId, linkId, checkoutUrl],
   )
 
-  return Response.json({ checkoutUrl: order.data.data.checkoutUrl })
+  return Response.json({ checkoutUrl })
 }

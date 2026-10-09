@@ -13,7 +13,7 @@ export function DepositForm({ enabled, currency }: { enabled: boolean; currency:
     if (isSubmitting || !enabled) return
 
     if (!Number.isFinite(Number(amount)) || Number(amount) < 2) {
-      setError('The minimum PayMeGate deposit is $2.00.')
+      setError('The minimum Rampex deposit is $2.00.')
       return
     }
 
@@ -38,7 +38,7 @@ export function DepositForm({ enabled, currency }: { enabled: boolean; currency:
       else window.location.assign(result.checkoutUrl)
     } catch {
       checkoutWindow?.close()
-      setError('Could not connect to PayMeGate. Please try again later.')
+      setError('Could not connect to Rampex. Please try again later.')
     } finally {
       setIsSubmitting(false)
     }
@@ -48,9 +48,9 @@ export function DepositForm({ enabled, currency }: { enabled: boolean; currency:
     return (
       <div role="status" className="mt-5 rounded-xl border border-amber-100/10 bg-amber-100/[0.035] p-4">
         <p className="text-sm font-semibold text-white/80">Secure deposits are not configured yet.</p>
-        <p className="mt-2 text-xs leading-5 text-white/55">Checkout stays disabled until the PayMeGate API key and webhook signing secret are configured on the server. Payments are credited only after a valid signed confirmation.</p>
-        <p className="mt-3 text-xs text-white/45">Configure this exact HTTPS webhook URL in PayMeGate:</p>
-        <p className="mt-2 break-all font-mono text-[11px] text-amber-100/65">https://v0-playfizz.vercel.app/api/webhooks/paymegate</p>
+        <p className="mt-2 text-xs leading-5 text-white/55">Checkout stays disabled until RAMPEX_API_KEY and RAMPEX_WEBHOOK_SECRET are configured as server-side environment variables. Payments are credited only after a valid signed confirmation.</p>
+        <p className="mt-3 text-xs text-white/45">Configure this exact HTTPS webhook URL in Rampex:</p>
+        <p className="mt-2 break-all font-mono text-[11px] text-amber-100/65">https://v0-playfizz.vercel.app/api/webhooks/rampex</p>
       </div>
     )
   }
@@ -82,10 +82,10 @@ export function DepositForm({ enabled, currency }: { enabled: boolean; currency:
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#f4bc63] px-5 text-sm font-bold text-[#1a140b] transition hover:bg-[#ffd48d] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSubmitting ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <ArrowUpRight aria-hidden="true" className="size-4" />}
-          {isSubmitting ? 'Connecting…' : 'Continue to PayMeGate'}
+          {isSubmitting ? 'Connecting…' : 'Continue to Rampex'}
         </button>
       </div>
-      <p id="deposit-help" className="text-xs leading-5 text-white/40">Minimum deposit $2.00; maximum $10,000.00. Your balance changes only after a verified payment webhook.</p>
+      <p id="deposit-help" className="text-xs leading-5 text-white/40">Minimum deposit $2.00; maximum $10,000.00. Your balance changes only after a verified Rampex payment webhook.</p>
       <p id="deposit-error" aria-live="polite" role={error ? 'alert' : undefined} className={error ? 'text-xs leading-5 text-rose-200' : 'sr-only'}>{error ?? ''}</p>
     </form>
   )
