@@ -32,27 +32,54 @@ const SYMBOL_IMAGES: Record<SweetBonanzaSymbol, string> = {
   scatter: '/games/sweet-bonanza/img/aple.png',
 }
 
-export function SweetBonanzaGame({
-  round,
-  balance,
-  currency,
-  profiles,
-  error,
-  sendAction,
-}: {
-  round: GameRoundView | null
-  balance: string
-  currency: string
+type Props = {
   profiles: SweetBonanzaProfile[]
-  error: string | null
-  sendAction: (action: any) => Promise<any>
-}) {
+  initialProfileId: string
+  initialRound: GameRoundView | null
+  initialBalance: string
+  currency: string
+  playerName: string
+}
+
+export function SweetBonanzaGame({ profiles, initialProfileId, initialRound, initialBalance, currency, playerName }: Props) {
+  const [round, setRound] = useState(initialRound)
+  const [balance, setBalance] = useState(initialBalance)
   const [wager, setWager] = useState('400')
-  const [profileId, setProfileId] = useState(profiles[0]?.id ?? 'standard')
+  const [profileId, setProfileId] = useState(initialRound?.sweetBonanza?.profileId ?? initialProfileId)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState('')
+  const [verified, setVerified] = useState('')
   const profile = profiles.find((item) => item.id === profileId) ?? profiles[0]
   const sweetBonanza = round?.sweetBonanza ?? null
   const grid = sweetBonanza?.grid ?? Array(5).fill(Array(6).fill('a'))
   const isSpinning = round?.status === 'active'
+
+  async function sendAction(payload: Record<string, unknown>) {
+    setPending(true)
+    setError('')
+    setVerified('')
+    try {
+      const response = await fetch(`/api/games/sweet-bonanza/play`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const result = await response.json()
+      if (!response.ok) {
+        setError(result.error || 'Action failed')
+        return
+      }
+      setRound(result.round)
+      setBalance(result.wallet.balance)
+      if (result.verified) {
+        setVerified(result.verified)
+      }
+    } catch (e) {
+      setError('Network error. Please try again.')
+    } finally {
+      setPending(false)
+    }
+  }
 
   async function spin() {
     const wagerAmount = Number(wager)
@@ -60,7 +87,7 @@ export function SweetBonanzaGame({
       alert('Choose a wager from 400 to 40,000 Fizzcoins in increments of 4.')
       return
     }
-    const data = await sendAction({
+    await sendAction({
       action: 'start',
       requestId: crypto.randomUUID(),
       wagerCents: wagerAmount / 4,
@@ -68,9 +95,6 @@ export function SweetBonanzaGame({
       expectedRtpBps: profile.rtpBps,
       profileId: profile.id,
     })
-    if (data.error) {
-      alert(data.error || 'Spin failed')
-    }
   }
 
   return (
