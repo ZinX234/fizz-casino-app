@@ -16,9 +16,104 @@ export default function SweetBonanzaGame() {
     script.async = true
     document.body.appendChild(script)
 
+    // Load integration script that hooks into the game without modifying original files
+    const integrationScript = document.createElement('script')
+    integrationScript.textContent = `
+      // Wait for original game to load, then hook into it
+      window.addEventListener('load', function() {
+        setTimeout(function() {
+          const originalPlayOneBoard = window.playOneBoard;
+          if (originalPlayOneBoard) {
+            window.playOneBoard = async function() {
+              const wagerInput = document.getElementById('wager');
+              const wager = wagerInput ? Number(wagerInput.value) : 400;
+              
+              try {
+                const response = await fetch('/api/games/sweet-bonanza/play', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    action: 'start',
+                    requestId: crypto.randomUUID(),
+                    wagerCents: wager / 4,
+                    mineCount: 0,
+                    expectedRtpBps: 9600,
+                    profileId: 'standard',
+                  }),
+                });
+                const data = await response.json();
+                
+                if (!response.ok) {
+                  alert(data.error || 'Spin failed');
+                  return;
+                }
+                
+                // Update balance display
+                const balanceDisplay = document.getElementById('balance-value');
+                if (balanceDisplay && data.wallet.balance) {
+                  balanceDisplay.textContent = data.wallet.balance;
+                }
+                
+                // Render the server-generated grid
+                const grid = data.round?.sweetBonanza?.grid;
+                if (grid) {
+                  const game = document.getElementById('game');
+                  game.classList.add('preview-changing');
+                  await new Promise(r => setTimeout(r, 180));
+                  
+                  const symbolFiles = {
+                    a: '/games/sweet-bonanza/img/aple.png',
+                    b: '/games/sweet-bonanza/img/banana.png',
+                    c: '/games/sweet-bonanza/img/konFIL.png',
+                    g: '/games/sweet-bonanza/img/vinog.png',
+                    h: '/games/sweet-bonanza/img/heart.png',
+                    m: '/games/sweet-bonanza/img/melon.png',
+                    p: '/games/sweet-bonanza/img/persik.png',
+                    s: '/games/sweet-bonanza/img/konSIN.png',
+                    z: '/games/sweet-bonanza/img/konZEL.png',
+                  };
+                  
+                  const fragment = document.createDocumentFragment();
+                  for (const row of grid) {
+                    for (const code of row.split(' ')) {
+                      const cell = document.createElement('div');
+                      cell.className = 'cell';
+                      const image = document.createElement('img');
+                      image.src = symbolFiles[code];
+                      image.alt = '';
+                      image.draggable = false;
+                      image.className = 'fruit-bounce-drop';
+                      cell.appendChild(image);
+                      fragment.appendChild(cell);
+                    }
+                  }
+                  game.replaceChildren(fragment);
+                  game.classList.remove('preview-changing');
+                  await new Promise(r => setTimeout(r, 720));
+                }
+                
+                // Show win if any
+                if (data.round.payout !== '0.00') {
+                  const winDisplay = document.getElementById('win-value');
+                  if (winDisplay) {
+                    winDisplay.textContent = data.round.payout;
+                  }
+                }
+              } catch (error) {
+                console.error('Spin failed:', error);
+                alert('Spin failed. Please try again.');
+              }
+            };
+          }
+        }, 500);
+      });
+    `
+    document.body.appendChild(integrationScript)
+
     return () => {
       document.head.removeChild(link)
       document.body.removeChild(script)
+      document.body.removeChild(integrationScript)
     }
   }, [])
 
