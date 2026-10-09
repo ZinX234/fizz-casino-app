@@ -1,8 +1,9 @@
 import { notFound, redirect } from 'next/navigation'
 import { CasinoGameBoard } from '@/components/casino-game-board'
 import { VaultHeistGame } from '@/components/vault-heist-game'
+import { SweetBonanzaGame } from '@/components/sweet-bonanza-game'
 import { auth } from '@/lib/auth/server'
-import { getActiveCasinoRound, getBuiltInRtpSetting, getVaultHeistConfiguration, getVaultHeistLeaderboard, supportedGameSlug } from '@/lib/casino-games'
+import { getActiveCasinoRound, getBuiltInRtpSetting, getVaultHeistConfiguration, getVaultHeistLeaderboard, getSweetBonanzaConfiguration, supportedGameSlug } from '@/lib/casino-games'
 import { getWalletSnapshot } from '@/lib/casino-data'
 import { getPlayerUsername } from '@/lib/player-profile'
 
@@ -32,6 +33,23 @@ export default async function GamePage({ params }: { params: Promise<{ slug: str
       currency={wallet.currency}
       playerName={username || session.user.name || 'Player'}
       leaderboard={leaderboard}
+    />
+  }
+
+  if (rawSlug === 'sweet-bonanza') {
+    const [configuration, initialRound, wallet, username] = await Promise.all([
+      getSweetBonanzaConfiguration(),
+      getActiveCasinoRound(session.user.id, rawSlug),
+      getWalletSnapshot(session.user.id),
+      getPlayerUsername(session.user.id),
+    ])
+    return <SweetBonanzaGame
+      profiles={configuration.profiles}
+      initialProfileId={configuration.activeProfileId}
+      initialRound={initialRound}
+      initialBalance={wallet.balance}
+      currency={wallet.currency}
+      playerName={username || session.user.name || 'Player'}
     />
   }
 

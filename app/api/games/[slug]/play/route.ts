@@ -4,11 +4,15 @@ import { CasinoGameError, getActiveCasinoRound, playCasinoAction, startCasinoRou
 import { databasePool, consumeUserRateLimit } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 
+export const dynamic = 'force-dynamic'
+
 const requestSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('start'), requestId: z.string().uuid(), wagerCents: z.number().int(), mineCount: z.number().int().optional(), expectedRtpBps: z.number().int().min(9000).max(9900), profileId: z.string().regex(/^[a-z0-9][a-z0-9-]{1,39}$/).optional() }).strict(),
+  z.object({ action: z.literal('start'), requestId: z.string().uuid(), wagerCents: z.number().int(), mineCount: z.number().int().optional(), expectedRtpBps: z.number().int().min(5500).max(9900), profileId: z.string().regex(/^[a-z0-9][a-z0-9-]{1,39}$/).optional() }).strict(),
   z.object({ action: z.literal('pick'), sessionId: z.string().uuid(), position: z.number().int() }).strict(),
   z.object({ action: z.literal('cashout'), sessionId: z.string().uuid() }).strict(),
   z.object({ action: z.literal('resume') }).strict(),
+  z.object({ action: z.literal('buy-bonus'), sessionId: z.string().uuid() }).strict(),
+  z.object({ action: z.literal('next-bonus-spin'), sessionId: z.string().uuid() }).strict(),
 ])
 
 export async function POST(request: Request, context: { params: Promise<{ slug: string }> }) {
@@ -48,13 +52,25 @@ export async function POST(request: Request, context: { params: Promise<{ slug: 
     } else if (body.data.action === 'resume') {
       round = await getActiveCasinoRound(session.user.id, rawSlug)
     } else {
-      round = await playCasinoAction({
-        userId: session.user.id,
-        slug: rawSlug,
-        sessionId: body.data.sessionId,
-        action: body.data.action,
-        position: body.data.action === 'pick' ? body.data.position : undefined,
-      })
+      // Sweet Bonanza has special bonus actions
+      if (rawSlug === 'sweet-bonanza' && (body.data.action === 'buy-bonus' || body.data.action === 'next-bonus-spin')) {
+        round = await playCasinoAction({
+          userId: session.user.id,
+          slug: rawSlug,
+          sessionId: body.data.sessionId,
+          action: body.data.action,
+        })
+      } else if (rawSlug === 'sweet-bonanza') {
+        return Response.json({ error: 'Sweet Bonanza only supports start, buy-bonus, and next-bonus-spin actions.' }, { status: 400 })
+      } else {
+        round = await playCasinoAction({
+          userId: session.user.id,
+          slug: rawSlug,
+          sessionId: body.data.sessionId,
+          action: body.data.action,
+          position: body.data.action === 'pick' ? body.data.position : undefined,
+        })
+      }
     }
 
     const { rows: wallets } = await databasePool.query<{ balance: string; currency: string }>(

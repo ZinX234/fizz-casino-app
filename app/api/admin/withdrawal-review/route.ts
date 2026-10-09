@@ -3,6 +3,8 @@ import { auth } from '@/lib/auth/server'
 import { getCasinoAdminAccess } from '@/lib/casino-games'
 import { databasePool, withTransaction } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
+
+export const dynamic = 'force-dynamic'
 import { decryptPayoutDestination } from '@/lib/payout-details'
 
 const reviewSchema = z.object({

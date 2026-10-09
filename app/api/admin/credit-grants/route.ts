@@ -4,6 +4,8 @@ import { getCasinoAdminAccess } from '@/lib/casino-games'
 import { consumeUserRateLimit, withTransaction } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 
+export const dynamic = 'force-dynamic'
+
 const grantSchema = z.object({
   recipientEmail: z.string().trim().email().max(254),
   amount: z.string().trim().regex(/^(?:0|[1-9]\d{0,3})(?:\.\d{1,2})?$/).refine((value) => {

@@ -4,6 +4,8 @@ import { consumeUserRateLimit, databasePool, withTransaction } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 import { encryptPayoutDestination } from '@/lib/payout-details'
 
+export const dynamic = 'force-dynamic'
+
 const withdrawalSchema = z.object({
   amount: z.string().trim().max(8).regex(/^\d{1,5}(?:\.\d{1,2})?$/),
   requestId: z.string().uuid(),

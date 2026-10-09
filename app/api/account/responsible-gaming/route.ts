@@ -2,6 +2,8 @@ import { z } from 'zod'
 import { auth } from '@/lib/auth/server'
 import { consumeUserRateLimit, withTransaction } from '@/lib/db'
 
+export const dynamic = 'force-dynamic'
+
 const limitSchema = z.object({
   limitType: z.enum(['deposit', 'loss', 'session_time']),
   period: z.enum(['day', 'week', 'month', 'per_session']),

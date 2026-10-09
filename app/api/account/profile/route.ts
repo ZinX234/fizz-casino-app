@@ -3,6 +3,8 @@ import { auth } from '@/lib/auth/server'
 import { databasePool } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 
+export const dynamic = 'force-dynamic'
+
 const profileSchema = z.object({
   username: z.string().trim().min(3).max(20).regex(/^[A-Za-z0-9_]+$/),
   paypalFirstName: z.string().trim().min(1).max(80),

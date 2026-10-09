@@ -1,25 +1,27 @@
 import { Pool, type PoolClient } from 'pg'
 
-if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL is required for casino database access')
-}
-
 const globalForDatabase = globalThis as typeof globalThis & {
   databasePool?: Pool
 }
 
-export const databasePool =
-  globalForDatabase.databasePool ??
-  new Pool({
-    connectionString: process.env.DATABASE_URL,
-    max: 4,
-    idleTimeoutMillis: 20_000,
-    connectionTimeoutMillis: 5_000,
-  })
+export const databasePool: Pool = new Proxy({} as Pool, {
+  get(_target, prop) {
+    if (!process.env.DATABASE_URL) {
+      throw new Error('DATABASE_URL is required for casino database access')
+    }
 
-if (process.env.NODE_ENV !== 'production') {
-  globalForDatabase.databasePool = databasePool
-}
+    if (!globalForDatabase.databasePool) {
+      globalForDatabase.databasePool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        max: 4,
+        idleTimeoutMillis: 20_000,
+        connectionTimeoutMillis: 5_000,
+      })
+    }
+
+    return globalForDatabase.databasePool[prop as keyof Pool]
+  },
+})
 
 export async function consumeUserRateLimit(userId: string, route: string, maxRequests: number, windowSeconds: number) {
   const key = `${userId}:${route}`

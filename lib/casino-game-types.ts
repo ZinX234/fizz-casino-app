@@ -1,6 +1,7 @@
 import type { VaultHeistOutcome } from '@/lib/vault-heist-config'
+import type { SweetBonanzaSymbol } from '@/lib/sweet-bonanza-config'
 
-export type CasinoGameSlug = 'crash' | 'towers' | 'mines' | 'vault-heist'
+export type CasinoGameSlug = 'crash' | 'towers' | 'mines' | 'vault-heist' | 'sweet-bonanza'
 
 export type GameRoundView = {
   sessionId: string
@@ -31,6 +32,21 @@ export type GameRoundView = {
     masterKeyPending: boolean
     revealedDoors: Array<{ position: number; outcome: VaultHeistOutcome; security: number; multiplier: number }>
     allDoorOutcomes?: VaultHeistOutcome[]
+  }
+  sweetBonanza?: {
+    profileId: string
+    profileName: string
+    grid: string[][]
+    winningSymbol: SweetBonanzaSymbol | null
+    symbolCount: number
+    baseMultiplier: number
+    finalMultiplier: number
+    isBonusTriggered?: boolean
+    bonusSpinsRemaining?: number
+    bonusMultiplier?: number
+    isBonusRound?: boolean
+    currentBonusSpin?: number
+    bonusTotalPayout?: number
   }
 }
 

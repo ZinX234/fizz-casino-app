@@ -2,6 +2,8 @@ import { z } from 'zod'
 import { auth } from '@/lib/auth/server'
 import { consumeUserRateLimit, withTransaction } from '@/lib/db'
 
+export const dynamic = 'force-dynamic'
+
 const ticketSchema = z.object({
   subject: z.string().trim().min(3).max(160),
   message: z.string().trim().min(5).max(8000),

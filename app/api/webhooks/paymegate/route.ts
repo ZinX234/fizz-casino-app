@@ -2,6 +2,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
 import { databasePool, withTransaction } from '@/lib/db'
 
+export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 const eventSchema = z.object({

@@ -6,7 +6,7 @@ import { ArrowLeft, Check, CircleHelp, ShieldCheck, TriangleAlert } from 'lucide
 import type { GameRoundView, GameRtpSetting } from '@/lib/casino-game-types'
 import { formatFizzcoins } from '@/lib/format-money'
 
-const gameNames = { crash: 'Crash', towers: 'Towers', mines: 'Mines', 'vault-heist': 'Vault Heist' } as const
+const gameNames = { crash: 'Crash', towers: 'Towers', mines: 'Mines', 'vault-heist': 'Vault Heist', 'sweet-bonanza': 'Sweet Bonanza' } as const
 
 type Props = {
   setting: GameRtpSetting
@@ -201,5 +201,6 @@ function payoutMultiplier(slug: 'mines' | 'towers', picks: number, mineCount: nu
 function gameDescription(slug: GameRtpSetting['slug']) {
   if (slug === 'crash') return 'Watch the multiplier climb, then cash out before the server-generated crash point.'
   if (slug === 'towers') return 'Pick one of three columns per row. One wrong pick ends the round; every safe row grows your payout.'
+  if (slug === 'sweet-bonanza') return 'Match 8+ symbols across the 6x5 grid to win. Weighted symbol frequencies with RTP-controlled payouts.'
   return 'Pick the mine count, reveal safe tiles, and cash out before you uncover a mine.'
 }

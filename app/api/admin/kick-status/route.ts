@@ -4,6 +4,8 @@ import { getCasinoAdminAccess } from '@/lib/casino-games'
 import { withTransaction } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 
+export const dynamic = 'force-dynamic'
+
 const updateSchema = z.object({ isLive: z.boolean() }).strict()
 
 export async function POST(request: Request) {

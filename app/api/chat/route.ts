@@ -4,6 +4,8 @@ import { consumeUserRateLimit, databasePool } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 import { CASINO_OWNER_EMAIL } from '@/lib/casino-games'
 
+export const dynamic = 'force-dynamic'
+
 const messageSchema = z.object({ message: z.string().trim().min(1).max(240) }).strict()
 const MAX_MESSAGES = 60
 

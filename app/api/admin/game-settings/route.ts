@@ -3,6 +3,8 @@ import { auth } from '@/lib/auth/server'
 import { CasinoGameError, getCasinoAdminAccess, supportedGameSlug, updateBuiltInHouseEdge } from '@/lib/casino-games'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 
+export const dynamic = 'force-dynamic'
+
 const updateSchema = z.object({
   slug: z.enum(['crash', 'towers', 'mines', 'vault-heist']),
   houseEdgeBps: z.number().int().min(100).max(1000).multipleOf(10),
