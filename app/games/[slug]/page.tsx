@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { CasinoGameBoard } from '@/components/casino-game-board'
 import { VaultHeistGame } from '@/components/vault-heist-game'
-import { SweetBonanzaGame } from '@/components/sweet-bonanza-game'
+import SweetBonanzaGame from '@/components/sweet-bonanza-game'
 import { auth } from '@/lib/auth/server'
 import { getActiveCasinoRound, getBuiltInRtpSetting, getVaultHeistConfiguration, getVaultHeistLeaderboard, getSweetBonanzaConfiguration, supportedGameSlug } from '@/lib/casino-games'
 import { getWalletSnapshot } from '@/lib/casino-data'
