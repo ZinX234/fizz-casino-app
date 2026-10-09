@@ -23,11 +23,32 @@ export default function SweetBonanzaGame() {
   }, [])
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center bg-[#0f0f13]">
+    <div className="relative w-full h-screen flex items-center justify-center bg-[#0f0f13]">
       <div id="site-fixed-container">
         <div id="game-wrapper">
           <div id="game"></div>
         </div>
+        <div id="balance"></div>
+        <div id="win-panel"></div>
+        <div id="bet-panel"></div>
+        <input 
+          id="wager" 
+          type="number" 
+          defaultValue="400" 
+          min="400" 
+          max="40000" 
+          step="4"
+          className="hidden"
+        />
+        <button id="play">Play</button>
+        <div id="fizzcoins-balance">
+          <div id="fizzcoins-icon">⚡</div>
+          <div id="fizzcoins-copy">
+            <div id="fizzcoins-label">BALANCE</div>
+            <div id="fizzcoins-value">0</div>
+          </div>
+        </div>
+        <button id="bet-settings-btn">Bet</button>
       </div>
     </div>
   )
