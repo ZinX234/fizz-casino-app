@@ -6,8 +6,6 @@ import { ArrowLeft, Check, CircleHelp, ShieldCheck, TriangleAlert } from 'lucide
 import type { GameRoundView, GameRtpSetting } from '@/lib/casino-game-types'
 import { formatFizzcoins } from '@/lib/format-money'
 
-const gameNames = { crash: 'Crash', towers: 'Towers', mines: 'Mines', 'vault-heist': 'Vault Heist', 'sweet-bonanza': 'Sweet Bonanza' } as const
-
 type Props = {
   setting: GameRtpSetting
   initialRound: GameRoundView | null
@@ -108,12 +106,12 @@ export function CasinoGameBoard({ setting, initialRound, initialBalance, currenc
       <div className="mx-auto max-w-6xl">
         <Link href="/casino" className="inline-flex items-center gap-2 text-sm font-medium text-white/55 transition hover:text-white"><ArrowLeft aria-hidden="true" className="size-4" /> Back to lobby</Link>
         <div className="mt-7 flex flex-col gap-5 border-b border-white/[0.08] pb-6 sm:flex-row sm:items-end sm:justify-between">
-          <div><p className="eyebrow">Fizz originals · {playerName}</p><h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{gameNames[setting.slug]}</h1><p className="mt-2 max-w-xl text-sm leading-6 text-white/45">{gameDescription(setting.slug)}</p></div>
+          <div><p className="eyebrow">Fizz originals · {playerName}</p><h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{setting.name}</h1><p className="mt-2 max-w-xl text-sm leading-6 text-white/45">{gameDescription(setting.slug)}</p></div>
           <div className="flex items-center gap-3 self-start rounded-xl border border-white/10 bg-white/[0.035] px-4 py-3 sm:self-auto"><ShieldCheck aria-hidden="true" className="size-4 text-emerald-200/75" /><div><p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-white/35">Published settings</p><p className="mt-1 text-xs font-semibold text-white/80">RTP {((round?.rtpBps ?? setting.rtpBps) / 100).toFixed(2)}% <span className="px-1 text-white/25">·</span> House edge {((round?.houseEdgeBps ?? setting.houseEdgeBps) / 100).toFixed(2)}%</p></div></div>
         </div>
 
         <div className="mt-7 grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <section aria-label={`${gameNames[setting.slug]} game`} className="rounded-[24px] border border-white/[0.08] bg-[#12141a] p-4 sm:p-7">
+          <section aria-label={`${setting.name} game`} className="rounded-[24px] border border-white/[0.08] bg-[#12141a] p-4 sm:p-7">
             <div className="flex min-h-[300px] flex-col items-center justify-center rounded-[19px] border border-white/[0.06] bg-[radial-gradient(ellipse_at_50%_35%,rgba(78,88,107,.22),rgba(13,14,19,.92)_75%)] p-4 sm:min-h-[390px] sm:p-8">
               {setting.slug === 'crash' && <CrashDisplay round={round} multiplier={currentMultiplier} />}
               {setting.slug === 'mines' && <MinesBoard round={round} mineCount={mineCount} pending={pending} onPick={pick} />}
@@ -201,6 +199,5 @@ function payoutMultiplier(slug: 'mines' | 'towers', picks: number, mineCount: nu
 function gameDescription(slug: GameRtpSetting['slug']) {
   if (slug === 'crash') return 'Watch the multiplier climb, then cash out before the server-generated crash point.'
   if (slug === 'towers') return 'Pick one of three columns per row. One wrong pick ends the round; every safe row grows your payout.'
-  if (slug === 'sweet-bonanza') return 'Match 8+ symbols across the 6x5 grid to win. Weighted symbol frequencies with RTP-controlled payouts.'
   return 'Pick the mine count, reveal safe tiles, and cash out before you uncover a mine.'
 }
