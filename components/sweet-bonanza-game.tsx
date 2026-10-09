@@ -31,7 +31,7 @@ const SYMBOL_IMAGES: Record<SweetBonanzaSymbol, string> = {
   scatter: '/games/sweet-bonanza/img/aple.png',
 }
 
-export default function SweetBonanzaGame({
+export function SweetBonanzaGame({
   round,
   balance,
   currency,
@@ -44,7 +44,21 @@ export default function SweetBonanzaGame({
   currency: string
   profiles: SweetBonanzaProfile[]
   error: string | null
-  sendAction: (action: any) => void
+  sendAction: (action: any) => Promise<any>
+}) {
+  round,
+  balance,
+  currency,
+  profiles,
+  error,
+  sendAction,
+}: {
+  round: { sessionId: string; status: string; payout: string; outcome: any } | null
+  balance: string
+  currency: string
+  profiles: SweetBonanzaProfile[]
+  error: string | null
+  sendAction: (action: any) => Promise<any>
 }) {
   const [wager, setWager] = useState('400')
   const [profileId, setProfileId] = useState(profiles[0]?.id ?? 'standard')
@@ -53,13 +67,13 @@ export default function SweetBonanzaGame({
   const grid = sweetBonanza?.grid ?? Array(5).fill(Array(6).fill('a'))
   const isSpinning = round?.status === 'active'
 
-  function spin() {
+  async function spin() {
     const wagerAmount = Number(wager)
     if (!Number.isSafeInteger(wagerAmount) || wagerAmount < 400 || wagerAmount > 40_000 || wagerAmount % 4 !== 0) {
       alert('Choose a wager from 400 to 40,000 Fizzcoins in increments of 4.')
       return
     }
-    void sendAction({
+    const data = await sendAction({
       action: 'start',
       requestId: crypto.randomUUID(),
       wagerCents: wagerAmount / 4,
@@ -67,6 +81,9 @@ export default function SweetBonanzaGame({
       expectedRtpBps: profile.rtpBps,
       profileId: profile.id,
     })
+    if (data.error) {
+      alert(data.error || 'Spin failed')
+    }
   }
 
   return (
@@ -87,19 +104,22 @@ export default function SweetBonanzaGame({
 
       <div className="relative aspect-[6/5] w-full max-w-[600px] mx-auto rounded-lg border border-white/[0.06] bg-[#1a1a20] p-2">
         <div className="grid grid-cols-6 grid-rows-5 gap-1 h-full">
-          {grid.map((row, rowIndex) =>
-            row.map((symbol, colIndex) => (
-              <div
-                key={`${rowIndex}-${colIndex}`}
-                className="relative flex items-center justify-center bg-[#22222a] rounded-md overflow-hidden"
-              >
-                <img
-                  src={SYMBOL_IMAGES[symbol as SweetBonanzaSymbol]}
-                  alt={SYMBOL_NAMES[symbol as SweetBonanzaSymbol]}
-                  className="w-full h-full object-contain"
-                />
-              </div>
-            ))
+          {grid.map((row: string[], rowIndex: number) =>
+            row.map((symbol: string, colIndex: number) => {
+              const symbolKey = symbol as SweetBonanzaSymbol
+              return (
+                <div
+                  key={`${rowIndex}-${colIndex}`}
+                  className="relative flex items-center justify-center bg-[#22222a] rounded-md overflow-hidden"
+                >
+                  <img
+                    src={SYMBOL_IMAGES[symbolKey]}
+                    alt={SYMBOL_NAMES[symbolKey]}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              )
+            })
           )}
         </div>
       </div>
@@ -155,7 +175,7 @@ export default function SweetBonanzaGame({
                 <div>
                   <p className="text-sm font-bold">Win! {formatFizzcoins(round.payout, currency)}</p>
                   <p className="text-xs text-white/70">
-                    {sweetBonanza.winningSymbol ? `${SYMBOL_NAMES[sweetBonanza.winningSymbol]} ×${sweetBonanza.symbolCount}` : 'No match'}
+                    {sweetBonanza.winningSymbol ? `${SYMBOL_NAMES[sweetBonanza.winningSymbol as SweetBonanzaSymbol]} ×${sweetBonanza.symbolCount}` : 'No match'}
                     {sweetBonanza.finalMultiplier > 0 && ` · ${sweetBonanza.finalMultiplier.toFixed(2)}× multiplier`}
                   </p>
                 </div>
@@ -169,3 +189,5 @@ export default function SweetBonanzaGame({
     </div>
   )
 }
+
+export default SweetBonanzaGame

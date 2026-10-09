@@ -44,12 +44,19 @@ export default async function GamePage({ params }: { params: Promise<{ slug: str
       getPlayerUsername(session.user.id),
     ])
     return <SweetBonanzaGame
-      profiles={configuration.profiles}
-      initialProfileId={configuration.activeProfileId}
-      initialRound={initialRound}
-      initialBalance={wallet.balance}
+      round={initialRound}
+      balance={wallet.balance}
       currency={wallet.currency}
-      playerName={username || session.user.name || 'Player'}
+      profiles={configuration.profiles}
+      error={null}
+      sendAction={async (action) => {
+        const res = await fetch('/api/games/sweet-bonanza/play', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(action),
+        })
+        return res.json()
+      }}
     />
   }
 
