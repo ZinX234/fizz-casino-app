@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { auth } from '@/lib/auth/server'
-import { consumeUserRateLimit, databasePool, withTransaction } from '@/lib/db'
+import { databasePool, withTransaction } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 
 const depositSchema = z.object({
@@ -133,10 +133,6 @@ export async function POST(request: Request) {
   const amountCents = parsed.success ? parseCents(parsed.data.amount) : null
   if (!parsed.success || amountCents === null || amountCents < BigInt(MIN_DEPOSIT_CENTS) || amountCents > BigInt(MAX_DEPOSIT_CENTS)) {
     return Response.json({ error: 'Enter a valid deposit amount between $2.00 and $10,000.00.' }, { status: 400 })
-  }
-
-  if (!(await consumeUserRateLimit(session.user.id, 'deposit-create', 5, 3600))) {
-    return Response.json({ error: 'Please wait before starting another deposit.' }, { status: 429 })
   }
 
   const depositId = randomUUID()
