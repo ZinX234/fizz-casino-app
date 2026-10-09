@@ -234,7 +234,30 @@ export async function POST(request: Request) {
        WHERE id = $1::uuid AND provider = 'rampex' AND status = 'pending'`,
       [depositId],
     )
-    console.error('[v0] Rampex returned an invalid or unsuccessful payment link:', providerResponse.status)
+    const responseFields = (value: unknown) =>
+      value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value).sort() : []
+    const failureReason = !providerResponse.ok
+      ? 'http_error'
+      : !paymentLink.success
+        ? 'invalid_response_shape'
+        : paymentLink.data.success === false
+          ? 'provider_rejected'
+          : !linkId
+            ? 'missing_link_id'
+            : !checkoutUrl
+              ? 'missing_checkout_url'
+              : 'untrusted_checkout_url'
+    console.error('[v0] Rampex payment link response rejected:', JSON.stringify({
+      status: providerResponse.status,
+      reason: failureReason,
+      topLevelFields: responseFields(providerPayload),
+      dataFields: responseFields(
+        providerPayload && typeof providerPayload === 'object' && 'data' in providerPayload
+          ? providerPayload.data
+          : null,
+      ),
+      validationPaths: paymentLink.success ? [] : paymentLink.error.issues.map((issue) => issue.path.join('.')),
+    }))
     return Response.json({ error: 'Rampex could not start a verified checkout. Please try again later.' }, { status: 502 })
   }
 
