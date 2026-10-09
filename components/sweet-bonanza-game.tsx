@@ -23,7 +23,7 @@ export default function SweetBonanzaGame() {
   }, [])
 
   return (
-    <div className="relative w-full h-screen flex items-center justify-center bg-[#0f0f13]">
+    <div className="relative w-full h-screen flex items-center justify-center" style={{ background: 'url(/games/sweet-bonanza/фон.png) no-repeat center center fixed', backgroundSize: 'cover' }}>
       <div id="site-fixed-container">
         <div id="game-wrapper">
           <div id="game"></div>
