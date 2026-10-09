@@ -1,8 +1,9 @@
 import { notFound, redirect } from 'next/navigation'
 import { CasinoGameBoard } from '@/components/casino-game-board'
 import { VaultHeistGame } from '@/components/vault-heist-game'
+import SweetBonanzaGame from '@/components/sweet-bonanza-game'
 import { auth } from '@/lib/auth/server'
-import { getActiveCasinoRound, getBuiltInRtpSetting, getVaultHeistConfiguration, getVaultHeistLeaderboard, supportedGameSlug } from '@/lib/casino-games'
+import { getActiveCasinoRound, getBuiltInRtpSetting, getVaultHeistConfiguration, getVaultHeistLeaderboard, getSweetBonanzaConfiguration, supportedGameSlug } from '@/lib/casino-games'
 import { getWalletSnapshot } from '@/lib/casino-data'
 import { getPlayerUsername } from '@/lib/player-profile'
 
@@ -12,7 +13,6 @@ export const metadata = { title: 'Play | Fizz Casino', description: 'Play Fizz o
 export default async function GamePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug: rawSlug } = await params
   if (!supportedGameSlug(rawSlug)) notFound()
-  if (rawSlug === 'sweet-bonanza') notFound()
 
   const { data: session } = await auth.getSession()
   if (!session?.user) redirect(`/auth/sign-in?returnTo=/games/${rawSlug}`)
@@ -34,6 +34,10 @@ export default async function GamePage({ params }: { params: Promise<{ slug: str
       playerName={username || session.user.name || 'Player'}
       leaderboard={leaderboard}
     />
+  }
+
+  if (rawSlug === 'sweet-bonanza') {
+    return <SweetBonanzaGame />
   }
 
   const [settings, initialRound, wallet, username] = await Promise.all([

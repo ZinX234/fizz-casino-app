@@ -42,12 +42,13 @@ type Props = {
   kickIsLive: boolean
 }
 
-const supportedGames = new Set(['crash', 'mines', 'towers', 'vault-heist'])
+const supportedGames = new Set(['crash', 'mines', 'towers', 'vault-heist', 'sweet-bonanza'])
 const gameArtwork: Record<string, string> = {
   crash: '/games/fizz-crash-airplane.png',
   mines: '/games/fizz-mines.png',
   towers: '/games/fizz-towers.png',
   'vault-heist': '/games/vault-heist-bg.png',
+  'sweet-bonanza': '/games/sweet-bonanza/cover.png',
 }
 const spotlights: Record<string, { eyebrow: string; title: string; detail: string }> = {
   crash: { eyebrow: 'Fizz originals', title: 'Ride the multiplier', detail: 'Cash out before the round ends.' },
