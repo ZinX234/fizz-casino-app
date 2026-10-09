@@ -52,11 +52,7 @@ export async function ensureBuiltInGames() {
      ON CONFLICT (slug) DO UPDATE SET
        status = 'available',
        featured = true,
-       configuration = CASE
-         WHEN NOT (public.games.configuration ? 'houseEdgeBps')
-         THEN public.games.configuration || EXCLUDED.configuration
-         ELSE public.games.configuration
-       END`,
+       configuration = public.games.configuration || EXCLUDED.configuration`,
     [gameCatalog[0].description, gameCatalog[1].description, gameCatalog[2].description],
   )
   await databasePool.query(
@@ -65,11 +61,7 @@ export async function ensureBuiltInGames() {
      ON CONFLICT (slug) DO UPDATE SET
        status = 'available',
        featured = true,
-       configuration = CASE
-         WHEN NOT (public.games.configuration ? 'vaultHeist')
-         THEN public.games.configuration || jsonb_build_object('vaultHeist', EXCLUDED.configuration->'vaultHeist')
-         ELSE public.games.configuration
-       END`,
+       configuration = public.games.configuration || jsonb_build_object('vaultHeist', EXCLUDED.configuration->'vaultHeist')`,
     [gameCatalog[3].description, JSON.stringify({ houseEdgeBps: 400, vaultHeist: cloneDefaultVaultHeistConfig() })],
   )
   await databasePool.query(
@@ -79,16 +71,8 @@ export async function ensureBuiltInGames() {
        status = 'available',
        featured = true,
        cover_image_url = '/games/sweet-bonanza/cover.png',
-       configuration = CASE
-         WHEN NOT (public.games.configuration ? 'sweetBonanza')
-         THEN public.games.configuration || jsonb_build_object('sweetBonanza', EXCLUDED.configuration->'sweetBonanza')
-         ELSE public.games.configuration
-       END`,
+       configuration = public.games.configuration || jsonb_build_object('sweetBonanza', EXCLUDED.configuration->'sweetBonanza')`,
     [gameCatalog[4].description, JSON.stringify({ sweetBonanza: cloneDefaultSweetBonanzaConfig() })],
-  )
-  // Force update status and featured to ensure availability
-  await databasePool.query(
-    `UPDATE public.games SET status = 'available', featured = true, cover_image_url = '/games/sweet-bonanza/cover.png' WHERE slug = 'sweet-bonanza'`,
   )
 }
 
