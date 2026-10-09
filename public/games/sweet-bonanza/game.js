@@ -1,13 +1,13 @@
 const symbolFiles = {
-  a: '/games/sweet-bonanza/img/aple.png',
-  b: '/games/sweet-bonanza/img/banana.png',
-  c: '/games/sweet-bonanza/img/konFIL.png',
-  g: '/games/sweet-bonanza/img/vinog.png',
-  h: '/games/sweet-bonanza/img/heart.png',
-  m: '/games/sweet-bonanza/img/melon.png',
-  p: '/games/sweet-bonanza/img/persik.png',
-  s: '/games/sweet-bonanza/img/konSIN.png',
-  z: '/games/sweet-bonanza/img/konZEL.png',
+  a: 'img/aple.png',
+  b: 'img/banana.png',
+  c: 'img/konFIL.png',
+  g: 'img/vinog.png',
+  h: 'img/heart.png',
+  m: 'img/melon.png',
+  p: 'img/persik.png',
+  s: 'img/konSIN.png',
+  z: 'img/konZEL.png',
 };
 
 // These fixed boards are animation samples, not generated game outcomes.
@@ -67,69 +67,16 @@ async function playOneBoard() {
   playButton.disabled = true;
   playButton.textContent = 'Playing…';
 
-  const wagerInput = document.getElementById('wager');
-  const wager = wagerInput ? Number(wagerInput.value) : 400;
+  const board = presetBoards[boardIndex];
+  boardIndex += 1;
+  if (boardIndex === presetBoards.length) boardIndex = 0;
 
   try {
-    // Fetch current Sweet Bonanza configuration to get RTP
-    const configResponse = await fetch('/api/admin/sweet-bonanza-settings');
-    const configData = await configResponse.json();
-    
-    // Get the active profile's RTP
-    const activeProfile = configData.configuration?.profiles?.find(p => p.id === configData.configuration.activeProfileId);
-    const rtpBps = activeProfile?.rtpBps || 9600; // Default to 96% if not found
-    const profileId = activeProfile?.id || 'standard';
-
-    // Call FizzCoins backend API with the current RTP
-    const response = await fetch('/api/games/sweet-bonanza/play', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'start',
-        requestId: crypto.randomUUID(),
-        wagerCents: wager / 4,
-        mineCount: 0,
-        expectedRtpBps: rtpBps,
-        profileId: profileId,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      alert(data.error || 'Spin failed');
-      playButton.textContent = 'Play';
-      playButton.disabled = false;
-      isAnimating = false;
-      return;
-    }
-
-    // Update balance display
-    const balanceDisplay = document.getElementById('balance-value');
-    if (balanceDisplay && data.wallet.balance) {
-      balanceDisplay.textContent = data.wallet.balance;
-    }
-
-    // Render the server-generated grid
-    const grid = data.round?.sweetBonanza?.grid;
-    if (grid) {
-      game.classList.add('preview-changing');
-      await wait(180);
-      renderBoard(grid, true);
-      game.classList.remove('preview-changing');
-      await wait(720);
-    }
-
-    // Show win if any
-    if (data.round.payout !== '0.00') {
-      const winDisplay = document.getElementById('win-value');
-      if (winDisplay) {
-        winDisplay.textContent = data.round.payout;
-      }
-    }
-  } catch (error) {
-    console.error('Spin failed:', error);
-    alert('Spin failed. Please try again.');
+    game.classList.add('preview-changing');
+    await wait(180);
+    renderBoard(board, true);
+    game.classList.remove('preview-changing');
+    await wait(720);
   } finally {
     game.classList.remove('preview-changing');
     playButton.textContent = 'Play';
