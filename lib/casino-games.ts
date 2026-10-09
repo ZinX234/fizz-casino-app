@@ -6,6 +6,8 @@ import { databasePool, withTransaction } from '@/lib/db'
 import type { CasinoGameSlug, GameRoundView, GameRtpSetting } from '@/lib/casino-game-types'
 import { xpForFizzcoinWager } from '@/lib/progression'
 import { assertVaultHeistConfig, cloneDefaultVaultHeistConfig, payoutMultiplierForRtp, payoutMultiplierForVaultPick, sanitizeVaultHeistConfig, type VaultHeistConfig, type VaultHeistOutcome, type VaultHeistProfile } from '@/lib/vault-heist-config'
+import { sanitizeSweetBonanzaConfig, type SweetBonanzaConfig, type SweetBonanzaProfile, type SweetBonanzaSymbol } from '@/lib/sweet-bonanza-config'
+import { calculatePayoutForRtp, calculateSlotWin, generateWeightedSlotGrid } from '@/lib/sweet-bonanza-math'
 
 export const CASINO_OWNER_EMAIL = 'benarch80@gmail.com'
 const MIN_EDGE_BPS = 100
@@ -29,7 +31,7 @@ export class CasinoGameError extends Error {
 }
 
 function isGameSlug(value: string): value is CasinoGameSlug {
-  return value === 'crash' || value === 'towers' || value === 'mines' || value === 'vault-heist'
+  return value === 'crash' || value === 'towers' || value === 'mines' || value === 'vault-heist' || value === 'sweet-bonanza'
 }
 
 function readHouseEdge(configuration: unknown) {
@@ -62,9 +64,7 @@ export async function ensureBuiltInGames() {
     [gameCatalog[3].description, JSON.stringify({ houseEdgeBps: 400, vaultHeist: cloneDefaultVaultHeistConfig() })],
   )
   await databasePool.query(
-    `UPDATE public.games
-     SET status = 'maintenance', featured = false,
-         cover_image_url = NULL, configuration = configuration - 'sweetBonanza'
+    `UPDATE public.games SET status = 'maintenance', featured = false
      WHERE slug = 'sweet-bonanza'`,
   )
 }
@@ -404,6 +404,19 @@ function roundView(row: Record<string, any>): GameRoundView {
       ...(settled && Array.isArray(outcome.doorOutcomes) ? { allDoorOutcomes: outcome.doorOutcomes.filter(isHeistOutcome) } : {}),
     }
   }
+  if (slug === 'sweet-bonanza') {
+    const snapshot = parseOutcome(outcome.sweetBonanzaSnapshot)
+    const grid = Array.isArray(outcome.grid) ? outcome.grid : []
+    view.sweetBonanza = {
+      profileId: String(snapshot.id),
+      profileName: String(snapshot.name),
+      grid: grid.map(row => Array.isArray(row) ? row.map(String) : []),
+      winningSymbol: (outcome.winningSymbol as SweetBonanzaSymbol | null) ?? null,
+      symbolCount: Number(outcome.symbolCount ?? 0),
+      baseMultiplier: Number(outcome.baseMultiplier ?? 0),
+      finalMultiplier: Number(outcome.finalMultiplier ?? 0),
+    }
+  }
   if (settled) {
     view.fairness = {
       serverSeed: String(outcome.serverSeed),
@@ -515,6 +528,13 @@ export async function startCasinoRound(input: {
   if (input.slug === 'mines' && (!Number.isInteger(input.mineCount) || input.mineCount < 1 || input.mineCount > 24)) {
     throw new CasinoGameError('Choose between 1 and 24 mines.')
   }
+  if (input.slug === 'sweet-bonanza' && (!Number.isInteger(input.wagerCents) || input.wagerCents < 400)) {
+    throw new CasinoGameError('Minimum wager for Sweet Bonanza is 400 Fizzcoins.')
+  }
+  if (input.slug === 'sweet-bonanza' && (!Number.isInteger(input.expectedRtpBps) || input.expectedRtpBps < 5500 || input.expectedRtpBps > 9900)) {
+    throw new CasinoGameError('RTP must be between 55% and 99% for Sweet Bonanza.')
+  }
+
   await ensureBuiltInGames()
   return withTransaction(async (client) => {
     const wallet = await getLockedWallet(client, input.userId)
@@ -555,7 +575,15 @@ export async function startCasinoRound(input: {
       : null
     if (input.slug === 'vault-heist' && !vaultHeistProfile) throw new CasinoGameError('Choose an available Vault Heist profile.', 409)
 
-    const houseEdgeBps = vaultHeistProfile ? 10_000 - vaultHeistProfile.rtpBps : readHouseEdge(games[0].configuration)
+    const sweetBonanzaConfig = input.slug === 'sweet-bonanza'
+      ? sanitizeSweetBonanzaConfig(parseOutcome(games[0].configuration).sweetBonanza)
+      : null
+    const sweetBonanzaProfile = sweetBonanzaConfig
+      ? sweetBonanzaConfig.profiles.find((profile) => profile.id === (input.profileId ?? sweetBonanzaConfig.activeProfileId))
+      : null
+    if (input.slug === 'sweet-bonanza' && !sweetBonanzaProfile) throw new CasinoGameError('Choose an available Sweet Bonanza profile.', 409)
+
+    const houseEdgeBps = vaultHeistProfile ? 10_000 - vaultHeistProfile.rtpBps : sweetBonanzaProfile ? 10_000 - sweetBonanzaProfile.rtpBps : readHouseEdge(games[0].configuration)
     const rtpBps = 10_000 - houseEdgeBps
     if (input.expectedRtpBps !== rtpBps) {
       throw new CasinoGameError(`Published RTP changed to ${(rtpBps / 100).toFixed(1)}% (house edge ${(houseEdgeBps / 100).toFixed(1)}%). Refresh this page to review the new settings before starting.`, 409)
@@ -599,6 +627,24 @@ export async function startCasinoRound(input: {
       outcome.revealedDoors = []
       outcome.doorOutcomes = makeVaultHeistDoorOutcomes(serverSeed, clientSeed, session.id, vaultHeistProfile)
     }
+    if (input.slug === 'sweet-bonanza' && sweetBonanzaProfile) {
+      outcome.sweetBonanzaSnapshot = sweetBonanzaProfile
+      const isBonusRound = input.profileId?.includes('bonus') || false
+      const grid = generateWeightedSlotGrid(serverSeed, clientSeed, session.id, sweetBonanzaProfile, isBonusRound)
+      const slotResult = calculateSlotWin(grid, sweetBonanzaProfile, isBonusRound)
+      outcome.grid = grid.symbols
+      outcome.winningSymbol = slotResult.winningSymbol
+      outcome.symbolCount = slotResult.symbolCount
+      outcome.baseMultiplier = slotResult.baseMultiplier
+      outcome.finalMultiplier = slotResult.finalMultiplier
+      outcome.payoutMultiplier = calculatePayoutForRtp(slotResult.finalMultiplier, rtpBps)
+      outcome.isBonusTriggered = slotResult.isBonusTriggered
+      outcome.bonusSpinsRemaining = slotResult.bonusSpinsRemaining
+      outcome.bonusMultiplier = slotResult.bonusMultiplier
+      outcome.isBonusRound = isBonusRound
+      outcome.result = slotResult.payout > 0 ? 'win' : 'loss'
+    }
+
     await client.query(
       `INSERT INTO public.game_results (bet_id, outcome, payout_amount, server_seed_hash)
        VALUES ($1::uuid, $2::jsonb, 0, $3)`, [String(betId), JSON.stringify(outcome), commitment],
@@ -620,6 +666,57 @@ export async function startCasinoRound(input: {
          updated_at = now()`,
       [input.userId, xpForFizzcoinWager(input.wagerCents)],
     )
+
+    // Sweet Bonanza settles immediately after spin (unless bonus triggered)
+    if (input.slug === 'sweet-bonanza' && outcome.result) {
+      const isBonusTriggered = outcome.isBonusTriggered === true
+
+      if (isBonusTriggered) {
+        // Bonus round: keep session active, add bonus spins
+        outcome.bonusSpinsRemaining = sweetBonanzaProfile?.bonusFreeSpins ?? 10
+        outcome.currentBonusSpin = 0
+        await client.query(`UPDATE public.game_results SET outcome = $2::jsonb WHERE bet_id = $1::uuid`, [String(betId), JSON.stringify(outcome)])
+        return roundView({
+          session_id: session.id,
+          started_at: session.started_at,
+          bet_id: betId,
+          wager_amount: wagerAmount,
+          payout_amount: '0.00',
+          bet_status: 'pending',
+          outcome,
+          server_seed_hash: commitment,
+          slug: input.slug,
+          session_status: 'active',
+        })
+      }
+
+      const payoutMultiplier = Number(outcome.payoutMultiplier ?? 0)
+      const payoutCents = Math.floor(Number(wagerAmount) * payoutMultiplier * 100 + 1e-8)
+      const payoutAmount = (payoutCents / 100).toFixed(2)
+      await settleRound(client, {
+        session_id: session.id,
+        started_at: session.started_at,
+        bet_id: betId,
+        wager_amount: wagerAmount,
+        payout_amount: '0.00',
+        bet_status: 'pending',
+        outcome,
+        server_seed_hash: commitment,
+        slug: input.slug,
+      }, input.userId, outcome, payoutAmount, outcome.result as 'win' | 'loss')
+      return roundView({
+        session_id: session.id,
+        started_at: session.started_at,
+        bet_id: betId,
+        wager_amount: wagerAmount,
+        payout_amount: payoutAmount,
+        bet_status: 'settled',
+        outcome,
+        server_seed_hash: commitment,
+        slug: input.slug,
+        session_status: 'completed',
+      })
+    }
 
     return roundView({
       session_id: session.id,
@@ -685,7 +782,7 @@ export async function playCasinoAction(input: {
   userId: string
   slug: CasinoGameSlug
   sessionId: string
-  action: 'pick' | 'cashout'
+  action: 'pick' | 'cashout' | 'buy-bonus' | 'next-bonus-spin'
   position?: number
 }): Promise<GameRoundView> {
   return withTransaction(async (client) => {
@@ -805,6 +902,100 @@ export async function playCasinoAction(input: {
         const payoutAmount = (payoutCents / 100).toFixed(2)
         outcome.cashoutMultiplier = payoutMultiplier
         await settleRound(client, row, input.userId, outcome, payoutAmount, 'win')
+      } else if (input.slug === 'sweet-bonanza') {
+        if (input.action === 'buy-bonus') {
+          const { rows: games } = await client.query<{ configuration: unknown }>(
+            `SELECT configuration FROM public.games WHERE slug = 'sweet-bonanza' FOR SHARE`, [],
+          )
+          if (!games[0]) throw new CasinoGameError('Sweet Bonanza is unavailable.', 404)
+          const sweetBonanzaConfig = sanitizeSweetBonanzaConfig(parseOutcome(games[0].configuration).sweetBonanza)
+          const profile = sweetBonanzaConfig.profiles.find((p) => p.id === sweetBonanzaConfig.activeProfileId)
+          if (!profile) throw new CasinoGameError('Default profile not found.', 409)
+
+          const bonusCost = profile.buyBonusCost
+          const wallet = await getLockedWallet(client, input.userId)
+          if (Number(wallet.balance) < bonusCost) throw new CasinoGameError('Insufficient balance for bonus buy.', 409)
+
+          // Deduct bonus cost
+          await insertWalletLedger(client, {
+            userId: input.userId,
+            walletId: wallet.id,
+            amount: `-${bonusCost.toFixed(2)}`,
+            type: 'bet',
+            betId: String(row.bet_id),
+            idempotencyKey: `bonus-buy:${row.bet_id}`,
+            description: 'Sweet Bonanza bonus buy',
+          })
+
+          // Generate bonus round
+          const serverSeed = randomBytes(32).toString('hex')
+          const commitment = createHash('sha256').update(serverSeed).digest('hex')
+          const clientSeed = String(outcome.clientSeed)
+          const grid = generateWeightedSlotGrid(serverSeed, clientSeed, String(row.session_id), profile, true)
+          const slotResult = calculateSlotWin(grid, profile, true)
+
+          outcome.grid = grid.symbols
+          outcome.winningSymbol = slotResult.winningSymbol
+          outcome.symbolCount = slotResult.symbolCount
+          outcome.baseMultiplier = slotResult.baseMultiplier
+          outcome.finalMultiplier = slotResult.finalMultiplier
+          outcome.payoutMultiplier = calculatePayoutForRtp(slotResult.finalMultiplier, Number(outcome.rtpBps))
+          outcome.isBonusRound = true
+          outcome.bonusSpinsRemaining = profile.bonusFreeSpins
+          outcome.currentBonusSpin = 0
+          outcome.bonusMultiplier = slotResult.bonusMultiplier
+          outcome.result = slotResult.payout > 0 ? 'win' : 'loss'
+
+          await client.query(`UPDATE public.game_results SET outcome = $2::jsonb WHERE bet_id = $1::uuid`, [String(row.bet_id), JSON.stringify(outcome)])
+          return roundView({ ...row, outcome, bet_status: 'pending', session_status: 'active' })
+        }
+
+        if (input.action === 'next-bonus-spin') {
+          const currentSpin = Number(outcome.currentBonusSpin ?? 0)
+          const remainingSpins = Number(outcome.bonusSpinsRemaining ?? 0)
+
+          if (remainingSpins <= 0) {
+            // End bonus round
+            const totalPayout = Number(outcome.bonusTotalPayout ?? 0)
+            if (totalPayout > 0) {
+              await settleRound(client, row, input.userId, outcome, totalPayout.toFixed(2), 'win')
+            } else {
+              await settleRound(client, row, input.userId, outcome, '0.00', 'loss')
+            }
+            return roundView({ ...row, outcome, bet_status: 'settled', session_status: 'completed', payout_amount: totalPayout.toFixed(2) })
+          }
+
+          // Generate next bonus spin
+          const { rows: games } = await client.query<{ configuration: unknown }>(
+            `SELECT configuration FROM public.games WHERE slug = 'sweet-bonanza' FOR SHARE`, [],
+          )
+          const sweetBonanzaConfig = sanitizeSweetBonanzaConfig(parseOutcome(games[0].configuration).sweetBonanza)
+          const profile = sweetBonanzaConfig.profiles.find((p) => p.id === sweetBonanzaConfig.activeProfileId)
+          if (!profile) throw new CasinoGameError('Default profile not found.', 409)
+
+          const serverSeed = randomBytes(32).toString('hex')
+          const grid = generateWeightedSlotGrid(serverSeed, String(outcome.clientSeed), String(row.session_id), profile, true)
+          const slotResult = calculateSlotWin(grid, profile, true)
+
+          outcome.grid = grid.symbols
+          outcome.winningSymbol = slotResult.winningSymbol
+          outcome.symbolCount = slotResult.symbolCount
+          outcome.baseMultiplier = slotResult.baseMultiplier
+          outcome.finalMultiplier = slotResult.finalMultiplier
+          outcome.payoutMultiplier = calculatePayoutForRtp(slotResult.finalMultiplier, Number(outcome.rtpBps))
+          outcome.currentBonusSpin = currentSpin + 1
+          outcome.bonusSpinsRemaining = remainingSpins - 1
+          outcome.bonusMultiplier = slotResult.bonusMultiplier
+
+          const spinPayout = Number(row.wager_amount) * slotResult.finalMultiplier
+          const currentTotal = Number(outcome.bonusTotalPayout ?? 0)
+          outcome.bonusTotalPayout = currentTotal + spinPayout
+
+          await client.query(`UPDATE public.game_results SET outcome = $2::jsonb WHERE bet_id = $1::uuid`, [String(row.bet_id), JSON.stringify(outcome)])
+          return roundView({ ...row, outcome, bet_status: 'pending', session_status: 'active' })
+        }
+
+        throw new CasinoGameError('Invalid action for Sweet Bonanza.')
       } else {
         if (!picks.length) throw new CasinoGameError('Reveal at least one safe tile before cashing out.')
         const multiplier = multiplierForSafePicks(input.slug, picks.length, Number(outcome.mineCount ?? 0), Number(outcome.rtpBps))

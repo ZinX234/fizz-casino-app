@@ -12,6 +12,7 @@ export const metadata = { title: 'Play | Fizz Casino', description: 'Play Fizz o
 export default async function GamePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug: rawSlug } = await params
   if (!supportedGameSlug(rawSlug)) notFound()
+  if (rawSlug === 'sweet-bonanza') notFound()
 
   const { data: session } = await auth.getSession()
   if (!session?.user) redirect(`/auth/sign-in?returnTo=/games/${rawSlug}`)
