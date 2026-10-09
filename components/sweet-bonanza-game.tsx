@@ -62,15 +62,15 @@ export default function SweetBonanzaGame() {
                   await new Promise(r => setTimeout(r, 180));
                   
                   const symbolFiles = {
-                    a: '/games/sweet-bonanza/img/aple.png',
-                    b: '/games/sweet-bonanza/img/banana.png',
-                    c: '/games/sweet-bonanza/img/konFIL.png',
-                    g: '/games/sweet-bonanza/img/vinog.png',
-                    h: '/games/sweet-bonanza/img/heart.png',
-                    m: '/games/sweet-bonanza/img/melon.png',
-                    p: '/games/sweet-bonanza/img/persik.png',
-                    s: '/games/sweet-bonanza/img/konSIN.png',
-                    z: '/games/sweet-bonanza/img/konZEL.png',
+                    a: 'img/aple.png',
+                    b: 'img/banana.png',
+                    c: 'img/konFIL.png',
+                    g: 'img/vinog.png',
+                    h: 'img/heart.png',
+                    m: 'img/melon.png',
+                    p: 'img/persik.png',
+                    s: 'img/konSIN.png',
+                    z: 'img/konZEL.png',
                   };
                   
                   const fragment = document.createDocumentFragment();
