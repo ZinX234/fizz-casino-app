@@ -55,6 +55,42 @@ function isTrustedCheckoutUrl(value: string) {
   }
 }
 
+function getSafeProviderErrorSummary(payload: unknown, secrets: string[]) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return []
+
+  const summaries: string[] = []
+  const collect = (value: unknown, path: string, depth: number) => {
+    if (typeof value === 'string') {
+      let message = value
+      for (const secret of secrets) {
+        if (secret) message = message.replaceAll(secret, '[redacted]')
+      }
+      message = message
+        .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted email]')
+        .replace(/\b0x[a-f0-9]{40}\b/gi, '[redacted wallet]')
+        .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '[redacted id]')
+        .slice(0, 300)
+      summaries.push(`${path}: ${message}`)
+      return
+    }
+    if (depth >= 3 || !value || typeof value !== 'object') return
+    if (Array.isArray(value)) {
+      value.slice(0, 5).forEach((item, index) => collect(item, `${path}[${index}]`, depth + 1))
+      return
+    }
+    for (const [key, nestedValue] of Object.entries(value).slice(0, 8)) {
+      collect(nestedValue, `${path}.${key}`, depth + 1)
+    }
+  }
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (['error', 'message', 'detail', 'errors', 'validation_errors', 'issues'].includes(key.toLowerCase())) {
+      collect(value, key, 0)
+    }
+  }
+  return summaries.slice(0, 8)
+}
+
 export async function POST(request: Request) {
   if (!isAllowedRequestOrigin(request)) {
     return Response.json({ error: 'Request origin is not allowed.' }, { status: 403 })
@@ -256,6 +292,12 @@ export async function POST(request: Request) {
           ? providerPayload.data
           : null,
       ),
+      providerError: getSafeProviderErrorSummary(providerPayload, [
+        apiKey,
+        webhookSecret,
+        session.user.email,
+        depositId,
+      ]),
       validationPaths: paymentLink.success ? [] : paymentLink.error.issues.map((issue) => issue.path.join('.')),
     }))
     return Response.json({ error: 'Rampex could not start a verified checkout. Please try again later.' }, { status: 502 })
