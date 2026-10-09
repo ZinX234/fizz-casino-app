@@ -71,7 +71,16 @@ async function playOneBoard() {
   const wager = wagerInput ? Number(wagerInput.value) : 400;
 
   try {
-    // Call FizzCoins backend API
+    // Fetch current Sweet Bonanza configuration to get RTP
+    const configResponse = await fetch('/api/admin/sweet-bonanza-settings');
+    const configData = await configResponse.json();
+    
+    // Get the active profile's RTP
+    const activeProfile = configData.configuration?.profiles?.find(p => p.id === configData.configuration.activeProfileId);
+    const rtpBps = activeProfile?.rtpBps || 9600; // Default to 96% if not found
+    const profileId = activeProfile?.id || 'standard';
+
+    // Call FizzCoins backend API with the current RTP
     const response = await fetch('/api/games/sweet-bonanza/play', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -80,8 +89,8 @@ async function playOneBoard() {
         requestId: crypto.randomUUID(),
         wagerCents: wager / 4,
         mineCount: 0,
-        expectedRtpBps: 9600,
-        profileId: 'standard',
+        expectedRtpBps: rtpBps,
+        profileId: profileId,
       }),
     });
 
