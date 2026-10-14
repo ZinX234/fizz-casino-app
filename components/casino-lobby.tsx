@@ -48,6 +48,7 @@ const gameArtwork: Record<string, string> = {
   mines: '/games/fizz-mines.png',
   towers: '/games/fizz-towers.png',
   'vault-heist': '/games/vault-heist-bg.png',
+  'donut-division': '/games/donut-division-cover.png',
 }
 const spotlights: Record<string, { eyebrow: string; title: string; detail: string }> = {
   crash: { eyebrow: 'Fizz originals', title: 'Ride the multiplier', detail: 'Cash out before the round ends.' },
