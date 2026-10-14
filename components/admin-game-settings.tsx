@@ -19,6 +19,15 @@ export function AdminGameSettings({ initialSettings }: { initialSettings: GameRt
     setMessage((current) => current?.slug === slug ? null : current)
   }
 
+  function updateBonusBuyMultiplier(multiplier: number) {
+    if (!Number.isFinite(multiplier)) return
+    const boundedMultiplier = Math.min(100, Math.max(1, Math.round(multiplier)))
+    setSettings((current) => current.map((item) => item.slug === 'donut-division'
+      ? { ...item, bonusBuyMultiplier: boundedMultiplier }
+      : item))
+    setMessage((current) => current?.slug === 'donut-division' ? null : current)
+  }
+
   async function save(slug: GameRtpSetting['slug']) {
     const setting = settings.find((item) => item.slug === slug)
     if (!setting) return
@@ -29,19 +38,24 @@ export function AdminGameSettings({ initialSettings }: { initialSettings: GameRt
         method: 'POST',
         cache: 'no-store',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ slug, houseEdgeBps: setting.houseEdgeBps }),
+        body: JSON.stringify({
+          slug,
+          houseEdgeBps: setting.houseEdgeBps,
+          ...(slug === 'donut-division' ? { bonusBuyMultiplier: setting.bonusBuyMultiplier ?? 100 } : {}),
+        }),
       })
       const result = await response.json().catch(() => null)
       if (!response.ok) throw new Error(result?.error ?? 'Could not save game settings.')
       const saved = result?.settings as GameRtpSetting | undefined
-      if (!saved || saved.slug !== slug || !Number.isInteger(saved.houseEdgeBps) || !Number.isInteger(saved.rtpBps)) {
+      if (!saved || saved.slug !== slug || !Number.isInteger(saved.houseEdgeBps) || !Number.isInteger(saved.rtpBps)
+        || (slug === 'donut-division' && !Number.isInteger(saved.bonusBuyMultiplier))) {
         throw new Error('The server did not confirm the saved odds. Refresh and try again.')
       }
       setSettings((current) => current.map((item) => item.slug === slug ? saved : item))
       setPublishedSettings((current) => current.map((item) => item.slug === slug ? saved : item))
       setMessage({
         slug,
-        text: `Saved for new rounds: ${(saved.houseEdgeBps / 100).toFixed(1)}% house edge · ${(saved.rtpBps / 100).toFixed(1)}% RTP.`,
+        text: `Saved for new rounds: ${(saved.houseEdgeBps / 100).toFixed(1)}% house edge · ${(saved.rtpBps / 100).toFixed(1)}% RTP${saved.bonusBuyMultiplier ? ` · Buy Bonus ${saved.bonusBuyMultiplier}×` : ''}.`,
         error: false,
       })
     } catch (error) {
@@ -61,6 +75,8 @@ export function AdminGameSettings({ initialSettings }: { initialSettings: GameRt
         {settings.map((setting) => {
           const published = publishedSettings.find((item) => item.slug === setting.slug) ?? setting
           const hasUnsavedChanges = published.houseEdgeBps !== setting.houseEdgeBps
+            || (setting.slug === 'donut-division'
+              && (published.bonusBuyMultiplier ?? 100) !== (setting.bonusBuyMultiplier ?? 100))
           return (
             <article key={setting.slug} className="rounded-2xl border border-white/[0.07] bg-black/10 p-4 sm:p-5">
               <div className="flex items-center justify-between"><h3 className="text-sm font-bold">{setting.name}</h3><span className="rounded-full border border-white/[0.08] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/45">{setting.slug}</span></div>
@@ -82,6 +98,26 @@ export function AdminGameSettings({ initialSettings }: { initialSettings: GameRt
               </div>
               <input id={`${setting.slug}-edge-slider`} type="range" min="100" max="9900" step="10" value={setting.houseEdgeBps} aria-label={`${setting.name} house edge slider`} aria-valuetext={`${(setting.houseEdgeBps / 100).toFixed(1)}% house edge`} onChange={(event) => updateHouseEdge(setting.slug, Number(event.target.value))} className="mt-4 h-2 w-full cursor-pointer accent-[#f4bc63]" />
               <div className="mt-2 flex justify-between text-[10px] text-white/35"><span>1% edge · 99% RTP</span><span>99% edge · 1% RTP</span></div>
+              {setting.slug === 'donut-division' && (
+                <div className="mt-5">
+                  <label htmlFor="donut-division-bonus-buy" className="text-xs text-white/50">Buy Bonus price</label>
+                  <div className="mt-2 flex items-center rounded-lg border border-white/10 bg-black/20 px-2.5 focus-within:border-amber-200/40">
+                    <input
+                      id="donut-division-bonus-buy"
+                      type="number"
+                      min="1"
+                      max="100"
+                      step="1"
+                      value={setting.bonusBuyMultiplier ?? 100}
+                      onChange={(event) => updateBonusBuyMultiplier(Number.parseInt(event.target.value, 10))}
+                      aria-label="Donut Division Buy Bonus price multiplier"
+                      className="w-full bg-transparent py-2 text-sm font-bold tabular-nums text-white outline-none"
+                    />
+                    <span className="text-xs text-white/40">× bet</span>
+                  </div>
+                  <p className="mt-2 text-[10px] leading-4 text-white/35">1×–100× selected bet. The casino’s $100 maximum wager still applies.</p>
+                </div>
+              )}
               <div className="mt-5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-3">
                 <div className="flex items-center justify-between"><span className="text-xs text-white/45">Currently published</span><span className="text-sm font-bold tabular-nums text-white">{(published.houseEdgeBps / 100).toFixed(1)}% edge</span></div>
                 <p className="mt-1 text-xs tabular-nums text-amber-100/80">{(published.rtpBps / 100).toFixed(1)}% RTP</p>

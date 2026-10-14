@@ -6,6 +6,7 @@ import { isAllowedRequestOrigin } from '@/lib/request-security'
 const updateSchema = z.object({
   slug: z.enum(['crash', 'towers', 'mines', 'vault-heist', 'donut-division']),
   houseEdgeBps: z.number().int().min(100).max(9900).multipleOf(10),
+  bonusBuyMultiplier: z.number().int().min(1).max(100).optional(),
 }).strict()
 
 export async function POST(request: Request) {
@@ -25,7 +26,15 @@ export async function POST(request: Request) {
     if (!body.success || !supportedGameSlug(body.data?.slug ?? '')) {
       return Response.json({ error: 'Choose a valid game and a house edge from 1% to 99%.' }, { status: 400 })
     }
-    const settings = await updateBuiltInHouseEdge(session.user.id, body.data.slug, body.data.houseEdgeBps)
+    if (body.data.slug !== 'donut-division' && body.data.bonusBuyMultiplier !== undefined) {
+      return Response.json({ error: 'Bonus buy settings are only available for Donut Division.' }, { status: 400 })
+    }
+    const settings = await updateBuiltInHouseEdge(
+      session.user.id,
+      body.data.slug,
+      body.data.houseEdgeBps,
+      body.data.bonusBuyMultiplier,
+    )
     return Response.json({ settings })
   } catch (error) {
     if (error instanceof CasinoGameError) return Response.json({ error: error.message }, { status: error.status })

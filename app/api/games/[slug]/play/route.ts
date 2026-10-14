@@ -5,7 +5,7 @@ import { databasePool, consumeUserRateLimit } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
 
 const requestSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('start'), requestId: z.string().uuid(), wagerCents: z.number().int(), mineCount: z.number().int().optional(), expectedRtpBps: z.number().int().min(100).max(9900), profileId: z.string().regex(/^[a-z0-9][a-z0-9-]{1,39}$/).optional() }).strict(),
+  z.object({ action: z.literal('start'), requestId: z.string().uuid(), wagerCents: z.number().int(), mineCount: z.number().int().optional(), expectedRtpBps: z.number().int().min(100).max(9900), profileId: z.string().regex(/^[a-z0-9][a-z0-9-]{1,39}$/).optional(), buyBonus: z.boolean().optional() }).strict(),
   z.object({ action: z.literal('pick'), sessionId: z.string().uuid(), position: z.number().int(), requestId: z.string().uuid().optional() }).strict(),
   z.object({ action: z.literal('bonus'), sessionId: z.string().uuid(), requestId: z.string().uuid(), choiceId: z.enum(['sticky', 'pick', 'surveillance']) }).strict(),
   z.object({ action: z.literal('cashout'), sessionId: z.string().uuid() }).strict(),
@@ -37,6 +37,9 @@ export async function POST(request: Request, context: { params: Promise<{ slug: 
     if (body.data.action === 'bonus' && rawSlug !== 'donut-division') {
       return Response.json({ error: 'Bonus choices are only available for Donut Division.' }, { status: 400 })
     }
+    if (body.data.action === 'start' && body.data.buyBonus && rawSlug !== 'donut-division') {
+      return Response.json({ error: 'Bonus purchases are only available for Donut Division.' }, { status: 400 })
+    }
     const rateLimit = body.data.action === 'sync'
       ? await consumeUserRateLimit(session.user.id, `game:${rawSlug}:sync`, 75, 60)
       : await consumeUserRateLimit(session.user.id, `game:${rawSlug}`, 40, 60)
@@ -52,6 +55,7 @@ export async function POST(request: Request, context: { params: Promise<{ slug: 
         requestId: body.data.requestId,
         expectedRtpBps: body.data.expectedRtpBps,
         profileId: body.data.profileId,
+        buyBonus: body.data.buyBonus,
       })
     } else if (body.data.action === 'resume') {
       round = await getActiveCasinoRound(session.user.id, rawSlug)

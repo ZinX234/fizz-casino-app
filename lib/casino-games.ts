@@ -8,12 +8,14 @@ import { xpForFizzcoinWager } from '@/lib/progression'
 import { crashMultiplierAtElapsed } from '@/lib/crash-math'
 import { payoutMultiplierForSafePicks } from '@/lib/casino-payout-math'
 import { assertVaultHeistConfig, cloneDefaultVaultHeistConfig, payoutMultiplierForRtp, payoutMultiplierForVaultPick, sanitizeVaultHeistConfig, type VaultHeistConfig, type VaultHeistOutcome, type VaultHeistProfile } from '@/lib/vault-heist-config'
-import { DONUT_BONUS_CHOICES, DONUT_SYMBOLS, evaluateDonutGrid, finalizeDonutBonusPayout, generateDonutBonus, generateInitialDonutSpin, getDonutRtpModel, revealDonutCards, type DonutBonusChoice, type DonutGrid } from '@/lib/donut-division-math'
+import { DONUT_BONUS_CHOICES, DONUT_SYMBOLS, evaluateDonutGrid, finalizeDonutBonusPayout, generateDonutBonus, generateDonutBonusPurchaseSpin, generateInitialDonutSpin, getDonutRtpModel, revealDonutCards, type DonutBonusChoice, type DonutGrid } from '@/lib/donut-division-math'
 
 export const CASINO_OWNER_EMAIL = 'benarch80@gmail.com'
 const MIN_EDGE_BPS = 100
 const MAX_EDGE_BPS = 9900
 const MAX_WAGER_CENTS = 10_000
+const DEFAULT_DONUT_BONUS_BUY_MULTIPLIER = 100
+const MAX_DONUT_BONUS_BUY_MULTIPLIER = 100
 const MAX_SAFE_PICKS = 8
 const CRASH_MAX_MULTIPLIER = 1000
 
@@ -43,6 +45,15 @@ function readHouseEdge(configuration: unknown) {
   return Number.isInteger(value) && value >= MIN_EDGE_BPS && value <= MAX_EDGE_BPS ? value : 200
 }
 
+function readDonutBonusBuyMultiplier(configuration: unknown) {
+  const value = configuration && typeof configuration === 'object' && 'bonusBuyMultiplier' in configuration
+    ? Number((configuration as { bonusBuyMultiplier: unknown }).bonusBuyMultiplier)
+    : DEFAULT_DONUT_BONUS_BUY_MULTIPLIER
+  return Number.isInteger(value) && value >= 1 && value <= MAX_DONUT_BONUS_BUY_MULTIPLIER
+    ? value
+    : DEFAULT_DONUT_BONUS_BUY_MULTIPLIER
+}
+
 export async function ensureBuiltInGames() {
   await databasePool.query(
     `INSERT INTO public.games (slug, name, provider, category, description, status, featured, configuration)
@@ -50,10 +61,16 @@ export async function ensureBuiltInGames() {
        ('crash', 'Crash', 'Fizz Originals', 'other', $1, 'available', true, '{"houseEdgeBps":200}'::jsonb),
        ('towers', 'Towers', 'Fizz Originals', 'other', $2, 'available', true, '{"houseEdgeBps":200}'::jsonb),
        ('mines', 'Mines', 'Fizz Originals', 'other', $3, 'available', true, '{"houseEdgeBps":200}'::jsonb),
-       ('donut-division', 'Donut Division', 'Fizz Originals', 'slots', $4, 'available', true, '{"houseEdgeBps":200}'::jsonb)
+       ('donut-division', 'Donut Division', 'Fizz Originals', 'slots', $4, 'available', true, '{"houseEdgeBps":200,"bonusBuyMultiplier":100}'::jsonb)
      ON CONFLICT (slug) DO UPDATE SET configuration = public.games.configuration || EXCLUDED.configuration
        WHERE NOT (public.games.configuration ? 'houseEdgeBps')`,
     [gameCatalog[0].description, gameCatalog[1].description, gameCatalog[2].description, gameCatalog[4].description],
+  )
+  await databasePool.query(
+    `UPDATE public.games
+     SET configuration = configuration || jsonb_build_object('bonusBuyMultiplier', $1::int)
+     WHERE slug = 'donut-division' AND NOT (configuration ? 'bonusBuyMultiplier')`,
+    [DEFAULT_DONUT_BONUS_BUY_MULTIPLIER],
   )
   await databasePool.query(
     `INSERT INTO public.games (slug, name, provider, category, description, status, featured, configuration)
@@ -76,7 +93,15 @@ export async function getBuiltInRtpSettings(): Promise<GameRtpSetting[]> {
     const vaultConfiguration = row.slug === 'vault-heist' ? sanitizeVaultHeistConfig(configuration.vaultHeist) : null
     const activeProfile = vaultConfiguration?.profiles.find((profile) => profile.id === vaultConfiguration.activeProfileId)
     const rtpBps = activeProfile?.rtpBps ?? (10_000 - readHouseEdge(row.configuration))
-    return { slug: row.slug, name: row.name, houseEdgeBps: 10_000 - rtpBps, rtpBps }
+    return {
+      slug: row.slug,
+      name: row.name,
+      houseEdgeBps: 10_000 - rtpBps,
+      rtpBps,
+      ...(row.slug === 'donut-division'
+        ? { bonusBuyMultiplier: readDonutBonusBuyMultiplier(row.configuration) }
+        : {}),
+    }
   })
 }
 
@@ -197,9 +222,19 @@ export async function getCasinoAdminAccess(userId: string, sessionEmail: string 
   })
 }
 
-export async function updateBuiltInHouseEdge(actorUserId: string, slug: CasinoGameSlug, houseEdgeBps: number) {
+export async function updateBuiltInHouseEdge(
+  actorUserId: string,
+  slug: CasinoGameSlug,
+  houseEdgeBps: number,
+  bonusBuyMultiplier?: number,
+) {
   if (!Number.isInteger(houseEdgeBps) || houseEdgeBps < MIN_EDGE_BPS || houseEdgeBps > MAX_EDGE_BPS || houseEdgeBps % 10 !== 0) {
     throw new CasinoGameError('House edge must be between 1% and 99%, in 0.1% increments.')
+  }
+  if (bonusBuyMultiplier !== undefined
+    && (slug !== 'donut-division' || !Number.isInteger(bonusBuyMultiplier)
+      || bonusBuyMultiplier < 1 || bonusBuyMultiplier > MAX_DONUT_BONUS_BUY_MULTIPLIER)) {
+    throw new CasinoGameError('Donut Division bonus buy multiplier must be between 1× and 100×.')
   }
 
   if (slug === 'vault-heist') {
@@ -250,16 +285,20 @@ export async function updateBuiltInHouseEdge(actorUserId: string, slug: CasinoGa
     if (!game) throw new CasinoGameError('Game settings were not found.', 404)
 
     const previousHouseEdgeBps = readHouseEdge(game.configuration)
+    const previousBonusBuyMultiplier = readDonutBonusBuyMultiplier(game.configuration)
     const { rows: updatedGames } = await client.query<{ configuration: unknown }>(
       `UPDATE public.games
-       SET configuration = configuration || jsonb_build_object('houseEdgeBps', $2::int), updated_at = now()
+       SET configuration = configuration || jsonb_build_object('houseEdgeBps', $2::int)
+         || CASE WHEN $3::int IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('bonusBuyMultiplier', $3::int) END,
+         updated_at = now()
        WHERE id = $1::uuid
        RETURNING configuration`,
-      [game.id, houseEdgeBps],
+      [game.id, houseEdgeBps, bonusBuyMultiplier ?? null],
     )
     if (!updatedGames[0]) throw new CasinoGameError('Game settings could not be confirmed after saving.', 500)
     const persistedHouseEdgeBps = readHouseEdge(updatedGames[0].configuration)
-    if (persistedHouseEdgeBps !== houseEdgeBps) {
+    if (persistedHouseEdgeBps !== houseEdgeBps
+      || (bonusBuyMultiplier !== undefined && readDonutBonusBuyMultiplier(updatedGames[0].configuration) !== bonusBuyMultiplier)) {
       throw new CasinoGameError('Saved game odds did not match the requested settings.', 500)
     }
     await client.query(
@@ -267,14 +306,30 @@ export async function updateBuiltInHouseEdge(actorUserId: string, slug: CasinoGa
        VALUES ($1::uuid, 'game.rtp.updated', 'game', $2::text, jsonb_build_object(
          'game', $3::text, 'previousHouseEdgeBps', $4::int, 'houseEdgeBps', $5::int,
          'previousRtpBps', $6::int, 'rtpBps', $7::int
-       ))`,
-      [actorUserId, game.id, slug, previousHouseEdgeBps, houseEdgeBps, 10_000 - previousHouseEdgeBps, 10_000 - houseEdgeBps],
+       ) || CASE WHEN $8::int IS NULL THEN '{}'::jsonb ELSE jsonb_build_object(
+         'previousBonusBuyMultiplier', $9::int, 'bonusBuyMultiplier', $8::int
+       ) END
+       )`,
+      [
+        actorUserId,
+        game.id,
+        slug,
+        previousHouseEdgeBps,
+        houseEdgeBps,
+        10_000 - previousHouseEdgeBps,
+        10_000 - houseEdgeBps,
+        bonusBuyMultiplier ?? null,
+        previousBonusBuyMultiplier,
+      ],
     )
     return {
       slug,
       name: game.name,
       houseEdgeBps,
       rtpBps: 10_000 - houseEdgeBps,
+      ...(slug === 'donut-division'
+        ? { bonusBuyMultiplier: readDonutBonusBuyMultiplier(updatedGames[0].configuration) }
+        : {}),
     }
   })
 }
@@ -574,8 +629,12 @@ export async function startCasinoRound(input: {
   requestId: string
   expectedRtpBps: number
   profileId?: string
+  buyBonus?: boolean
 }): Promise<GameRoundView> {
   if (!isGameSlug(input.slug)) throw new CasinoGameError('Unknown game.', 404)
+  if (input.buyBonus && input.slug !== 'donut-division') {
+    throw new CasinoGameError('Bonus purchases are only available for Donut Division.')
+  }
   if (!Number.isInteger(input.wagerCents) || input.wagerCents < 100 || input.wagerCents > MAX_WAGER_CENTS) {
     throw new CasinoGameError('Wager must be between $1.00 and $100.00.')
   }
@@ -612,7 +671,14 @@ export async function startCasinoRound(input: {
     )
     if (!games[0]) throw new CasinoGameError('This game is temporarily unavailable.', 404)
 
-    const wagerAmount = (input.wagerCents / 100).toFixed(2)
+    const bonusBuyMultiplier = input.buyBonus
+      ? readDonutBonusBuyMultiplier(games[0].configuration)
+      : 1
+    const wagerCents = input.wagerCents * bonusBuyMultiplier
+    if (!Number.isSafeInteger(wagerCents) || wagerCents > MAX_WAGER_CENTS) {
+      throw new CasinoGameError('This bonus purchase exceeds the $100 maximum wager. Lower your bet or ask an administrator to adjust the bonus price.')
+    }
+    const wagerAmount = (wagerCents / 100).toFixed(2)
     if (Number(wallet.balance) < Number(wagerAmount)) throw new CasinoGameError('Your wallet balance is too low.', 409)
     await enforceResponsibleGaming(client, input.userId, Number(wagerAmount))
 
@@ -651,7 +717,14 @@ export async function startCasinoRound(input: {
       houseEdgeBps,
       rtpBps,
       picks: [],
-      wagerCents: input.wagerCents,
+      wagerCents,
+      ...(input.buyBonus
+        ? {
+            buyBonus: true,
+            baseWagerCents: input.wagerCents,
+            bonusBuyMultiplier,
+          }
+        : {}),
     }
     if (input.slug === 'mines') {
       outcome.mineCount = input.mineCount
@@ -668,13 +741,9 @@ export async function startCasinoRound(input: {
       outcome.doorOutcomes = makeVaultHeistDoorOutcomes(serverSeed, clientSeed, session.id, vaultHeistProfile)
     }
     if (input.slug === 'donut-division') {
-      const spin = generateInitialDonutSpin({
-        wagerCents: input.wagerCents,
-        rtpBps,
-        serverSeed,
-        clientSeed,
-        sessionId: session.id,
-      })
+      const spin = input.buyBonus
+        ? generateDonutBonusPurchaseSpin({ rtpBps, serverSeed, clientSeed, sessionId: session.id })
+        : generateInitialDonutSpin({ wagerCents, rtpBps, serverSeed, clientSeed, sessionId: session.id })
       outcome.donutDivision = {
         ...spin,
         baseMultiplier: spin.rawMultiplier,
@@ -702,7 +771,9 @@ export async function startCasinoRound(input: {
       type: 'bet',
       betId,
       idempotencyKey,
-      description: `${input.slug[0].toUpperCase()}${input.slug.slice(1)} wager`,
+      description: input.buyBonus
+        ? 'Donut Division bonus purchase'
+        : `${input.slug[0].toUpperCase()}${input.slug.slice(1)} wager`,
     })
     await client.query(
       `INSERT INTO public.player_progression (user_id, total_xp)
@@ -710,7 +781,7 @@ export async function startCasinoRound(input: {
        ON CONFLICT (user_id) DO UPDATE SET
          total_xp = public.player_progression.total_xp + EXCLUDED.total_xp,
          updated_at = now()`,
-      [input.userId, xpForFizzcoinWager(input.wagerCents)],
+      [input.userId, xpForFizzcoinWager(wagerCents)],
     )
 
     if (input.slug === 'crash' && Number(outcome.crashPoint) <= 1) {
@@ -796,6 +867,7 @@ async function playDonutDivisionAction(
   const rtpBps = Number(outcome.rtpBps)
   const wagerCents = Number(outcome.wagerCents)
   const baseMultiplier = Number(donut.baseMultiplier)
+  const bonusPurchase = outcome.buyBonus === true
 
   if (input.action === 'bonus') {
     if (donut.bonusStage !== 'choose') throw new CasinoGameError('This round is not waiting for a bonus choice.', 409)
@@ -826,6 +898,7 @@ async function playDonutDivisionAction(
       baseMultiplier,
       bonusMultiplier: resolution.rawMultiplier,
       choice,
+      bonusPurchase,
       serverSeed,
       clientSeed,
       sessionId: input.sessionId,

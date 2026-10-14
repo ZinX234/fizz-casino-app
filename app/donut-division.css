@@ -1,5 +1,15 @@
 /* Donut Division — game animations and cartoon styling helpers. */
 
+.dd-game-reel-window {
+  aspect-ratio: 1;
+}
+
+@media (min-width: 768px) {
+  .dd-game-reel-window {
+    aspect-ratio: 2;
+  }
+}
+
 .dd-reel-cell {
   flex: 0 0 calc(100% / var(--dd-rows, 5));
   display: flex;

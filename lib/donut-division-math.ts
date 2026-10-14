@@ -392,11 +392,7 @@ function expectedLineAfterDrops(minDrops: number, maxDrops: number, onlyWithoutB
   return expected
 }
 
-let cachedModel: RtpModel | null = null
-
-export function getDonutRtpModel(): Readonly<RtpModel> {
-  if (cachedModel) return cachedModel
-
+export function calculateDonutRtpModel(): Readonly<RtpModel> {
   const emptyState = new Set<number>()
   const baseReturn = expectedGridReturn(emptyState)
   const bonusTriggerProbability = scatterTriggerProbability()
@@ -421,8 +417,30 @@ export function getDonutRtpModel(): Readonly<RtpModel> {
     + GOOEY_CHANCE * gooeyReturn
 
   if (!Number.isFinite(rawRtp) || rawRtp <= 0) throw new Error('Donut Division RTP model could not be calculated.')
-  cachedModel = { baseReturn, bonusTriggerProbability, bonusReturnByChoice, bonusReturn, branchScale, maxWinReturn, gooeyReturn, rawRtp }
-  return cachedModel
+  return { baseReturn, bonusTriggerProbability, bonusReturnByChoice, bonusReturn, branchScale, maxWinReturn, gooeyReturn, rawRtp }
+}
+
+const RTP_MODEL: Readonly<RtpModel> = {
+  baseReturn: 0.8231174334674803,
+  bonusTriggerProbability: 0.0023316126325945144,
+  bonusReturnByChoice: {
+    sticky: 2.2062569267935115,
+    pick: 27.75,
+    surveillance: 35.59097866947299,
+  },
+  bonusReturn: 21.849078532088836,
+  branchScale: {
+    sticky: 9.9032339646151,
+    pick: 0.7873541813365346,
+    surveillance: 0.6138937266939831,
+  },
+  maxWinReturn: 0.014965025810511082,
+  gooeyReturn: 12.97333073536794,
+  rawRtp: 0.9538927004707991,
+}
+
+export function getDonutRtpModel(): Readonly<RtpModel> {
+  return RTP_MODEL
 }
 
 export function donutGlobalScale(rtpBps: number) {
@@ -658,21 +676,72 @@ export function generateInitialDonutSpin(input: {
   return output
 }
 
+export function generateDonutBonusPurchaseSpin(input: {
+  serverSeed: string
+  clientSeed: string
+  sessionId: string
+  rtpBps: number
+}): DonutInitialSpin {
+  const grid = generateDonutGrid(input.serverSeed, input.clientSeed, input.sessionId, 'bonus-buy:base')
+  const availablePositions = Array.from({ length: REELS * ROWS }, (_, position) => position)
+  const scatterPositions = new Set<number>()
+  for (let scatter = 0; scatter < BONUS_MIN_SCATTERS; scatter += 1) {
+    const pick = deterministicInteger(
+      input.serverSeed,
+      input.clientSeed,
+      input.sessionId,
+      `bonus-buy:scatter:${scatter}`,
+      availablePositions.length,
+    )
+    const [position] = availablePositions.splice(pick, 1)
+    scatterPositions.add(position)
+  }
+  for (let reel = 0; reel < REELS; reel += 1) {
+    for (let row = 0; row < ROWS; row += 1) {
+      const position = reel * ROWS + row
+      if (scatterPositions.has(position)) grid[reel][row] = 'SCATTER'
+      else if (grid[reel][row] === 'SCATTER') grid[reel][row] = 'SPRINKLE'
+      if (reel < 3 && !scatterPositions.has(position)) {
+        grid[reel][row] = reel === 2 ? 'CHOC' : 'PINK'
+      }
+    }
+  }
+  const evaluation = evaluateDonutGrid(grid)
+  return {
+    grid,
+    lineWins: evaluation.lineWins,
+    scatterCount: evaluation.scatterCount,
+    bonusStage: 'choose',
+    feature: null,
+    bonusGrids: [],
+    bonusMultipliers: [],
+    rawMultiplier: evaluation.rawMultiplier,
+    branchScale: 1,
+    globalScale: donutGlobalScale(input.rtpBps),
+    payoutCents: null,
+    result: null,
+  }
+}
+
 export function finalizeDonutBonusPayout(input: {
   wagerCents: number
   rtpBps: number
   baseMultiplier: number
   bonusMultiplier: number
   choice: DonutBonusChoice
+  bonusPurchase?: boolean
   serverSeed: string
   clientSeed: string
   sessionId: string
 }) {
-  const scaledBonus = input.bonusMultiplier * getDonutRtpModel().branchScale[input.choice]
+  const model = getDonutRtpModel()
+  const purchaseReturn = input.bonusPurchase ? 2 + model.bonusReturn : 1
+  const scaledBonus = input.bonusMultiplier * model.branchScale[input.choice] / purchaseReturn
+  const baseMultiplier = input.baseMultiplier / purchaseReturn
   return calculateDonutPayoutCents(
     input.wagerCents,
     input.rtpBps,
-    input.baseMultiplier + scaledBonus,
+    baseMultiplier + scaledBonus,
     'bonus',
     input.serverSeed,
     input.clientSeed,

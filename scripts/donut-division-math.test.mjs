@@ -3,6 +3,7 @@ import test from 'node:test'
 import CONFIG from '../config/gameConfig.js'
 import {
   calculateDonutPayoutCents,
+  calculateDonutRtpModel,
   donutGlobalScale,
   evaluateDonutGrid,
   generateDonutGrid,
@@ -12,11 +13,14 @@ import { wagerCentsFromFizzcoins } from '../lib/fizzcoin-wager.ts'
 
 test('the RTP model normalizes each bonus path to the same expected return', () => {
   const model = getDonutRtpModel()
+  assert.deepEqual(model, calculateDonutRtpModel())
   for (const choice of ['sticky', 'pick', 'surveillance']) {
     const normalized = model.bonusReturnByChoice[choice] * model.branchScale[choice]
     assert.ok(Math.abs(normalized - model.bonusReturn) < 1e-10)
   }
-  assert.ok(Math.abs(model.rawRtp * donutGlobalScale(9600) - 0.96) < 1e-12)
+  for (const rtpBps of [100, 5000, 9600, 9900]) {
+    assert.ok(Math.abs(model.rawRtp * donutGlobalScale(rtpBps) - rtpBps / 10_000) < 1e-12)
+  }
 })
 
 test('the uploaded 25-line paytable evaluates a five-of-a-kind board', () => {

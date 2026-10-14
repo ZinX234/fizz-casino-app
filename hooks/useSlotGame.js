@@ -36,8 +36,8 @@ async function postGameAction(payload) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error || 'The game request could not be completed.');
+  const result = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(result?.error || `The game request failed (${response.status}).`);
   if (!result.round) throw new Error('The server did not return the game round.');
   return result;
 }
@@ -61,6 +61,7 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
   const [freeSpins, setFreeSpins] = useState(null);
   const [pickBonus, setPickBonus] = useState(() => pickStateFromRound(initialRound, coinsFromUsd(initialRound?.wager ?? 0)));
   const [maxWin, setMaxWin] = useState(null);
+  const [actionBusy, setActionBusy] = useState(false);
   const [autoplayLeft, setAutoplayLeft] = useState(0);
   const [quickSpin, setQuickSpin] = useState(false);
   const [soundOn, setSoundOn] = useState(CONFIG.sound.enabledByDefault);
@@ -75,6 +76,11 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
   const startRequestId = useRef(null);
   const bonusRequestId = useRef(null);
   const pickRequestIds = useRef(new Map());
+
+  const setBusy = useCallback((value) => {
+    busy.current = value;
+    setActionBusy(value);
+  }, []);
 
   useEffect(() => { betRef.current = bet; }, [bet]);
   useEffect(() => { demoRef.current = demo; }, [demo]);
@@ -104,13 +110,15 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
     return nextRound;
   }, []);
 
-  const animateServerGrid = useCallback(async (nextGrid) => {
+  const animateServerGrid = useCallback(async (nextGrid, alreadySpinning = false) => {
     setWinCells([]);
     setWinLines([]);
-    setSpinning(true);
-    setStoppedReels(0);
-    setSpinId(Date.now() + Math.random());
-    sound.spin();
+    if (!alreadySpinning) {
+      setSpinning(true);
+      setStoppedReels(0);
+      setSpinId(Date.now() + Math.random());
+      sound.spin();
+    }
     setGrid(nextGrid);
     await sleep(speed(CONFIG.animation.reelStopDelay));
     for (let reel = 0; reel < CONFIG.reels; reel += 1) {
@@ -229,8 +237,8 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
       await sleep(speed(1300));
     }
     setGooey(null);
-    busy.current = false;
-  }, [countUp, speed]);
+    setBusy(false);
+  }, [countUp, setBusy, speed]);
 
   const animateServerGooey = useCallback(async (serverRound) => {
     const donut = serverRound.donutDivision;
@@ -256,19 +264,34 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
 
   const beginServerRound = useCallback(async () => {
     if (currency !== 'USD') throw new Error('Fizzcoin wagers currently require a USD wallet.');
+    setSpinning(true);
+    setStoppedReels(0);
+    setSpinId(Date.now() + Math.random());
+    sound.spin();
     const requestId = startRequestId.current ?? crypto.randomUUID();
     startRequestId.current = requestId;
-    const result = await postGameAction({
-      action: 'start',
-      requestId,
-      wagerCents: wagerCentsFromFizzcoins(betRef.current),
-      expectedRtpBps: rtpBps,
-    });
-    startRequestId.current = null;
+    let result;
+    try {
+      result = await postGameAction({
+        action: 'start',
+        requestId,
+        wagerCents: wagerCentsFromFizzcoins(betRef.current),
+        expectedRtpBps: rtpBps,
+      });
+    } catch (error) {
+      setSpinning(false);
+      setStoppedReels(CONFIG.reels);
+      throw error;
+    }
     const serverRound = updateFromServer(result);
     const donut = serverRound.donutDivision;
-    if (!donut) throw new Error('The server returned an incomplete Donut Division round.');
-    await animateServerGrid(donut.grid);
+    if (!donut) {
+      setSpinning(false);
+      setStoppedReels(CONFIG.reels);
+      throw new Error('The server returned an incomplete Donut Division round.');
+    }
+    startRequestId.current = null;
+    await animateServerGrid(donut.grid, true);
     if (donut.bonusStage === 'choose') {
       setBanner({ tier: 'BONUS', title: 'BONUS CHOICE', subtitle: 'Case files unlocked — choose your investigation' });
       setBonusChoice(true);
@@ -290,7 +313,7 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
       setAutoplayLeft(0);
       return;
     }
-    busy.current = true;
+    setBusy(true);
     setMessage('');
     setWinCells([]);
     setWinLines([]);
@@ -318,11 +341,13 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
         return;
       }
     } catch (error) {
+      setSpinning(false);
+      setStoppedReels(CONFIG.reels);
       setMessage(error instanceof Error ? error.message : 'The game could not complete that spin.');
     } finally {
-      busy.current = false;
+      setBusy(false);
     }
-  }, [balance, beginServerRound, conductSpin, runGooey, runMaxWin]);
+  }, [balance, beginServerRound, conductSpin, runGooey, runMaxWin, setBusy]);
 
   const startPickBonus = useCallback(() => {
     const cards = buildClueCards();
@@ -343,7 +368,7 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
       const position = Number(card.position ?? String(card.id).replace('card-', ''));
       const requestId = pickRequestIds.current.get(position) ?? crypto.randomUUID();
       pickRequestIds.current.set(position, requestId);
-      busy.current = true;
+      setBusy(true);
       setMessage('');
       try {
         const result = await postGameAction({ action: 'pick', sessionId: round.sessionId, requestId, position });
@@ -363,7 +388,7 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'The case file could not be opened.');
       } finally {
-        busy.current = false;
+        setBusy(false);
       }
       return;
     }
@@ -382,10 +407,10 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
         pickRef.current = null;
         setBanner({ tier: 'FEATURE COMPLETE', title: `${formatCoins(total)} ${CONFIG.currency}`, subtitle: 'Case files collected' });
         sound.bigWin();
-        busy.current = false;
+        setBusy(false);
       }, 1100);
     }
-  }, [countUp, round, showServerPayout, updateFromServer]);
+  }, [countUp, round, setBusy, showServerPayout, updateFromServer]);
 
   const runDemoFreeSpins = useCallback(async (bonusId) => {
     const choice = getBonusChoice(bonusId);
@@ -432,15 +457,15 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
   const selectBonus = useCallback(async (bonusId) => {
     setBonusChoice(false);
     sound.click();
-    busy.current = true;
+    setBusy(true);
     if (demoRef.current) {
       if (bonusId === 'pick') {
         startPickBonus();
-        busy.current = false;
+        setBusy(false);
         return;
       }
       await runDemoFreeSpins(bonusId);
-      busy.current = false;
+      setBusy(false);
       return;
     }
     const requestId = bonusRequestId.current ?? crypto.randomUUID();
@@ -458,9 +483,9 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
       setBonusChoice(true);
       setMessage(error instanceof Error ? error.message : 'The bonus choice could not be completed.');
     } finally {
-      busy.current = false;
+      setBusy(false);
     }
-  }, [round, runDemoFreeSpins, runServerFreeSpins, startPickBonus, updateFromServer]);
+  }, [round, runDemoFreeSpins, runServerFreeSpins, setBusy, startPickBonus, updateFromServer]);
 
   const changeBet = useCallback((direction) => {
     setBet((current) => {
@@ -480,10 +505,10 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
 
   const gameActive = !spinning && !bonusChoice && !pickBonus && !freeSpins && !maxWin;
   const canAfford = demo || balance >= bet;
-  const canSpin = gameActive && !gooey && !busy.current;
+  const canSpin = gameActive && !gooey && !actionBusy;
 
   useEffect(() => {
-    if (autoplayLeft <= 0 || !gameActive || busy.current) return undefined;
+    if (autoplayLeft <= 0 || !gameActive || actionBusy) return undefined;
     if (!canAfford) {
       setAutoplayLeft(0);
       return undefined;
@@ -493,7 +518,7 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
       setAutoplayLeft((current) => Math.max(0, current - 1));
     }, 700);
     return () => clearTimeout(timer);
-  }, [autoplayLeft, gameActive, canAfford, doSpin]);
+  }, [actionBusy, autoplayLeft, gameActive, canAfford, doSpin]);
 
   return {
     bet,
