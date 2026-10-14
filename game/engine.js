@@ -2,7 +2,7 @@
 // Pure functions only — no React, no DOM.
 
 import { CONFIG } from '@/config/gameConfig';
-import { PAYLINES } from '@/game/paylines';
+import { getWinningCells, PAYLINES } from '@/game/paylines';
 
 const SYMBOL_IDS = Object.keys(CONFIG.symbols);
 const REGULAR_IDS = SYMBOL_IDS.filter((id) => id !== 'SCATTER');
@@ -100,10 +100,6 @@ export function evaluateGrid(grid, bet) {
     if (multiplier) scatterAmount = multiplier * bet;
   }
 
-  const winCells = new Set();
-  wins.forEach((win) => win.positions.forEach(([reel, row]) => winCells.add(`${reel}-${row}`)));
-  scatterPositions.forEach(([reel, row]) => winCells.add(`${reel}-${row}`));
-
   return {
     wins,
     total: wins.reduce((sum, win) => sum + win.amount, 0) + scatterAmount,
@@ -112,7 +108,7 @@ export function evaluateGrid(grid, bet) {
     scatterCount,
     scatterPositions,
     scatterAmount,
-    winCells: [...winCells],
+    winCells: getWinningCells(grid, wins),
   };
 }
 

@@ -10,7 +10,7 @@ import {
   getDonutRtpModel,
 } from '../lib/donut-division-math.ts'
 import { wagerCentsFromFizzcoins } from '../lib/fizzcoin-wager.ts'
-import { getWinningCells, getWinningPaylinePoints } from '../game/paylines.js'
+import { getWinningCells } from '../game/paylines.js'
 
 test('the RTP model normalizes each bonus path to the same expected return', () => {
   const model = getDonutRtpModel()
@@ -32,27 +32,31 @@ test('the uploaded 25-line paytable evaluates a five-of-a-kind board', () => {
   assert.equal(result.rawMultiplier, 100)
 })
 
-test('casino win highlights follow the server paylines and include scatters', () => {
+test('win highlights include only matching paylines and qualifying scatter symbols', () => {
   const grid = Array.from({ length: 5 }, () => Array(5).fill('SPRINKLE'))
   grid[0][2] = 'PINK'
-  grid[1][2] = 'PINK'
+  grid[1][2] = 'WILD'
   grid[2][2] = 'PINK'
   grid[4][4] = 'SCATTER'
   assert.deepEqual(
-    getWinningCells(grid, [{ lineIndex: 0, count: 3 }]).sort(),
-    ['0-2', '1-2', '2-2', '4-4'],
+    getWinningCells(grid, [{ lineIndex: 0, symbol: 'PINK', count: 3 }]).sort(),
+    ['0-2', '1-2', '2-2'],
   )
-})
-
-test('casino win paths stop at the server-reported matching symbol count', () => {
+  assert.deepEqual(getWinningCells(grid, []), [])
+  grid[0][2] = 'WILD'
+  grid[1][2] = 'WILD'
+  grid[2][2] = 'WILD'
   assert.deepEqual(
-    getWinningPaylinePoints([{ lineIndex: 9, count: 4 }]),
-    [{
-      lineIndex: 9,
-      points: [[50, 50], [150, 150], [250, 250], [350, 350]],
-    }],
+    getWinningCells(grid, [{ lineIndex: 0, symbol: 'WILD', count: 3 }]).sort(),
+    ['0-2', '1-2', '2-2'],
   )
-  assert.deepEqual(getWinningPaylinePoints([{ lineIndex: 99, count: 5 }, { lineIndex: 0, count: 2 }]), [])
+  grid[0][2] = 'PINK'
+  grid[1][2] = 'WILD'
+  grid[2][2] = 'PINK'
+  grid[2][4] = 'SCATTER'
+  grid[3][1] = 'SCATTER'
+  assert.deepEqual(getWinningCells(grid, []).sort(), ['2-4', '3-1', '4-4'])
+  assert.deepEqual(getWinningCells(grid, [{ lineIndex: 0, count: 3, symbol: 'CHOC' }]).sort(), ['2-4', '3-1', '4-4'])
 })
 
 test('server-seed inputs deterministically reproduce the same grid', () => {

@@ -29,33 +29,29 @@ export const PAYLINES = [
   [2, 1, 2, 1, 2],
 ];
 
-export function getWinningCells(grid, lineWins) {
+export function getWinningCells(grid, lineWins, minimumScatters = 3) {
   const winningCells = new Set();
-  lineWins.forEach(({ lineIndex, count }) => {
+  lineWins.forEach(({ lineIndex, symbol, count }) => {
     const line = PAYLINES[lineIndex];
-    if (!line || !Number.isInteger(count)) return;
+    if (!line || !Number.isInteger(count) || count < 3 || count > line.length) return;
+    if (!symbol || symbol === 'SCATTER') return;
+    const matches = line.slice(0, count).every((row, reel) =>
+      grid[reel]?.[row] === symbol || (symbol !== 'WILD' && grid[reel]?.[row] === 'WILD'));
+    if (!matches) return;
     for (let reel = 0; reel < Math.min(count, line.length); reel += 1) {
       winningCells.add(`${reel}-${line[reel]}`);
     }
   });
-  grid.forEach((column, reel) => column.forEach((symbol, row) => {
-    if (symbol === 'SCATTER') winningCells.add(`${reel}-${row}`);
-  }));
+  const scatterCount = grid.reduce(
+    (total, column) => total + column.filter((symbol) => symbol === 'SCATTER').length,
+    0,
+  );
+  if (scatterCount >= minimumScatters) {
+    grid.forEach((column, reel) => column.forEach((symbol, row) => {
+      if (symbol === 'SCATTER') winningCells.add(`${reel}-${row}`);
+    }));
+  }
   return [...winningCells];
-}
-
-export function getWinningPaylinePoints(lineWins) {
-  return lineWins.flatMap(({ lineIndex, count }) => {
-    const line = PAYLINES[lineIndex];
-    if (!line || !Number.isInteger(count) || count < 3) return [];
-    return [{
-      lineIndex,
-      points: line.slice(0, Math.min(count, line.length)).map((row, reel) => [
-        reel * 100 + 50,
-        row * 100 + 50,
-      ]),
-    }];
-  });
 }
 
 export default PAYLINES;
