@@ -28,12 +28,12 @@
 }
 
 .dd-spinning .dd-reel-strip {
-  animation: dd-reel-roll var(--dd-reel-speed, 240ms) linear infinite;
+  animation: dd-reel-roll var(--dd-reel-speed, 560ms) linear infinite;
 }
 
 @keyframes dd-reel-roll {
   from { transform: translateY(0); }
-  to { transform: translateY(-50%); }
+  to { transform: translateY(-100%); }
 }
 
 .dd-stopped .dd-reel-strip {
