@@ -12,7 +12,7 @@ export default function SceneBackground() {
       <img
         src={STREET_BG}
         alt=""
-        className="absolute inset-0 block h-full w-full object-cover object-center"
+        className="absolute inset-0 block h-full w-full object-cover object-top"
       />
     </div>
   );
