@@ -1,6 +1,6 @@
 import type { VaultHeistOutcome } from '@/lib/vault-heist-config'
 
-export type CasinoGameSlug = 'crash' | 'towers' | 'mines' | 'vault-heist'
+export type CasinoGameSlug = 'crash' | 'towers' | 'mines' | 'vault-heist' | 'donut-division'
 
 export type GameRoundView = {
   sessionId: string
@@ -31,6 +31,19 @@ export type GameRoundView = {
     masterKeyPending: boolean
     revealedDoors: Array<{ position: number; outcome: VaultHeistOutcome; security: number; multiplier: number }>
     allDoorOutcomes?: VaultHeistOutcome[]
+  }
+  donutDivision?: {
+    grid: string[][]
+    lineWins: Array<{ lineIndex: number; symbol: string; count: number; multiplier: number }>
+    scatterCount: number
+    bonusStage: 'choose' | 'pick' | null
+    bonusChoice: 'sticky' | 'pick' | 'surveillance' | null
+    bonusGrids: string[][][]
+    bonusMultipliers: number[]
+    bonusSpinWins: Array<{ lineWins: Array<{ lineIndex: number; symbol: string; count: number; multiplier: number }>; rawMultiplier: number }>
+    revealedCards: Array<{ position: number; value: number }>
+    picksRemaining: number
+    feature: 'gooey' | 'maxWin' | null
   }
 }
 

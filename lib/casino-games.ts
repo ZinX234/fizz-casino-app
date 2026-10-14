@@ -8,6 +8,7 @@ import { xpForFizzcoinWager } from '@/lib/progression'
 import { crashMultiplierAtElapsed } from '@/lib/crash-math'
 import { payoutMultiplierForSafePicks } from '@/lib/casino-payout-math'
 import { assertVaultHeistConfig, cloneDefaultVaultHeistConfig, payoutMultiplierForRtp, payoutMultiplierForVaultPick, sanitizeVaultHeistConfig, type VaultHeistConfig, type VaultHeistOutcome, type VaultHeistProfile } from '@/lib/vault-heist-config'
+import { DONUT_BONUS_CHOICES, DONUT_SYMBOLS, evaluateDonutGrid, finalizeDonutBonusPayout, generateDonutBonus, generateInitialDonutSpin, getDonutRtpModel, revealDonutCards, type DonutBonusChoice, type DonutGrid } from '@/lib/donut-division-math'
 
 export const CASINO_OWNER_EMAIL = 'benarch80@gmail.com'
 const MIN_EDGE_BPS = 100
@@ -21,6 +22,7 @@ const gameCatalog: Array<{ slug: CasinoGameSlug; name: string; description: stri
   { slug: 'towers', name: 'Towers', description: 'Climb eight rows, choosing a safe column on each step.' },
   { slug: 'mines', name: 'Mines', description: 'Choose the mine count, reveal safe tiles, and cash out whenever you want.' },
   { slug: 'vault-heist', name: 'Vault Heist', description: 'Crack a high-security vault, manage the alarm, and decide when to make your escape.' },
+  { slug: 'donut-division', name: 'Donut Division', description: 'Match donut symbols across 25 paylines and choose a bonus investigation when scatters land.' },
 ]
 
 export class CasinoGameError extends Error {
@@ -31,7 +33,7 @@ export class CasinoGameError extends Error {
 }
 
 function isGameSlug(value: string): value is CasinoGameSlug {
-  return value === 'crash' || value === 'towers' || value === 'mines' || value === 'vault-heist'
+  return value === 'crash' || value === 'towers' || value === 'mines' || value === 'vault-heist' || value === 'donut-division'
 }
 
 function readHouseEdge(configuration: unknown) {
@@ -47,10 +49,11 @@ export async function ensureBuiltInGames() {
      VALUES
        ('crash', 'Crash', 'Fizz Originals', 'other', $1, 'available', true, '{"houseEdgeBps":200}'::jsonb),
        ('towers', 'Towers', 'Fizz Originals', 'other', $2, 'available', true, '{"houseEdgeBps":200}'::jsonb),
-       ('mines', 'Mines', 'Fizz Originals', 'other', $3, 'available', true, '{"houseEdgeBps":200}'::jsonb)
+       ('mines', 'Mines', 'Fizz Originals', 'other', $3, 'available', true, '{"houseEdgeBps":200}'::jsonb),
+       ('donut-division', 'Donut Division', 'Fizz Originals', 'slots', $4, 'available', true, '{"houseEdgeBps":200}'::jsonb)
      ON CONFLICT (slug) DO UPDATE SET configuration = public.games.configuration || EXCLUDED.configuration
        WHERE NOT (public.games.configuration ? 'houseEdgeBps')`,
-    [gameCatalog[0].description, gameCatalog[1].description, gameCatalog[2].description],
+    [gameCatalog[0].description, gameCatalog[1].description, gameCatalog[2].description, gameCatalog[4].description],
   )
   await databasePool.query(
     `INSERT INTO public.games (slug, name, provider, category, description, status, featured, configuration)
@@ -65,7 +68,7 @@ export async function getBuiltInRtpSettings(): Promise<GameRtpSetting[]> {
   await ensureBuiltInGames()
   const { rows } = await databasePool.query<{ slug: CasinoGameSlug; name: string; configuration: unknown }>(
     `SELECT slug, name, configuration FROM public.games WHERE slug = ANY($1::text[])
-     ORDER BY CASE slug WHEN 'crash' THEN 1 WHEN 'towers' THEN 2 WHEN 'mines' THEN 3 ELSE 4 END`,
+     ORDER BY CASE slug WHEN 'crash' THEN 1 WHEN 'towers' THEN 2 WHEN 'mines' THEN 3 WHEN 'vault-heist' THEN 4 ELSE 5 END`,
     [gameCatalog.map((game) => game.slug)],
   )
   return rows.filter((row) => isGameSlug(row.slug)).map((row) => {
@@ -348,6 +351,37 @@ function numberArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is number => Number.isInteger(item)) : []
 }
 
+function parseDonutGrid(value: unknown): DonutGrid {
+  if (!Array.isArray(value) || value.length !== 5) throw new CasinoGameError('Donut Division round grid is unavailable.', 500)
+  return value.map((column) => {
+    if (!Array.isArray(column) || column.length !== 5) throw new CasinoGameError('Donut Division round grid is unavailable.', 500)
+    return column.map((symbol) => {
+      const knownSymbol = DONUT_SYMBOLS.find((candidate) => candidate === symbol)
+      if (!knownSymbol) throw new CasinoGameError('Donut Division round grid contains an unknown symbol.', 500)
+      return knownSymbol
+    })
+  })
+}
+
+function parseDonutGrids(value: unknown): DonutGrid[] {
+  if (!Array.isArray(value)) throw new CasinoGameError('Donut Division bonus grids are unavailable.', 500)
+  return value.map(parseDonutGrid)
+}
+
+function parseDonutLineWins(value: unknown) {
+  if (!Array.isArray(value)) throw new CasinoGameError('Donut Division line results are unavailable.', 500)
+  return value.map((entry) => {
+    const win = parseOutcome(entry)
+    const symbol = DONUT_SYMBOLS.find((candidate) => candidate === win.symbol)
+    if (!symbol || !Number.isInteger(win.lineIndex) || Number(win.lineIndex) < 0 || Number(win.lineIndex) >= 25
+      || !Number.isInteger(win.count) || Number(win.count) < 3 || Number(win.count) > 5
+      || !Number.isFinite(win.multiplier) || Number(win.multiplier) <= 0) {
+      throw new CasinoGameError('Donut Division line results are invalid.', 500)
+    }
+    return { lineIndex: Number(win.lineIndex), symbol, count: Number(win.count), multiplier: Number(win.multiplier) }
+  })
+}
+
 function roundView(row: Record<string, any>): GameRoundView {
   const outcome = parseOutcome(row.outcome)
   const settled = row.bet_status === 'settled'
@@ -394,6 +428,47 @@ function roundView(row: Record<string, any>): GameRoundView {
       masterKeyPending: outcome.masterKeyPending === true,
       revealedDoors: revealedDoors.map((door) => ({ ...door, multiplier: payoutMultiplierForRtp(door.multiplier, rtpBps) })),
       ...(settled && Array.isArray(outcome.doorOutcomes) ? { allDoorOutcomes: outcome.doorOutcomes.filter(isHeistOutcome) } : {}),
+    }
+  }
+  if (slug === 'donut-division') {
+    const donut = parseOutcome(outcome.donutDivision)
+    const bonusStage = donut.bonusStage === 'choose' || donut.bonusStage === 'pick' ? donut.bonusStage : null
+    const bonusChoice = DONUT_BONUS_CHOICES.find((choice) => choice === donut.bonusChoice) ?? null
+    const feature = donut.feature === 'gooey' || donut.feature === 'maxWin' ? donut.feature : null
+    const bonusSpinWins = Array.isArray(donut.bonusSpinWins)
+      ? donut.bonusSpinWins.map((entry) => {
+          const spin = parseOutcome(entry)
+          if (!Number.isFinite(spin.rawMultiplier) || Number(spin.rawMultiplier) < 0) {
+            throw new CasinoGameError('Donut Division bonus results are invalid.', 500)
+          }
+          return { lineWins: parseDonutLineWins(spin.lineWins), rawMultiplier: Number(spin.rawMultiplier) }
+        })
+      : []
+    const revealedCards = Array.isArray(donut.revealedCards)
+      ? donut.revealedCards.map((entry) => {
+          const card = parseOutcome(entry)
+          if (!Number.isInteger(card.position) || Number(card.position) < 0 || Number(card.position) >= 12
+            || !Number.isInteger(card.value) || Number(card.value) < 1) {
+            throw new CasinoGameError('Donut Division bonus card data is invalid.', 500)
+          }
+          return { position: Number(card.position), value: Number(card.value) }
+        })
+      : []
+    if (!Number.isInteger(donut.picksRemaining) || Number(donut.picksRemaining) < 0 || Number(donut.picksRemaining) > 3) {
+      throw new CasinoGameError('Donut Division bonus state is invalid.', 500)
+    }
+    view.donutDivision = {
+      grid: parseDonutGrid(donut.grid),
+      lineWins: parseDonutLineWins(donut.lineWins),
+      scatterCount: Number(donut.scatterCount),
+      bonusStage,
+      bonusChoice,
+      bonusGrids: parseDonutGrids(donut.bonusGrids),
+      bonusMultipliers: numberArray(donut.bonusMultipliers),
+      bonusSpinWins,
+      revealedCards,
+      picksRemaining: Number(donut.picksRemaining),
+      feature,
     }
   }
   if (settled) {
@@ -509,6 +584,7 @@ export async function startCasinoRound(input: {
   }
 
   await ensureBuiltInGames()
+  if (input.slug === 'donut-division') getDonutRtpModel()
   return withTransaction(async (client) => {
     const wallet = await getLockedWallet(client, input.userId)
     const idempotencyKey = requestLedgerKey(input.userId, input.requestId)
@@ -591,6 +667,29 @@ export async function startCasinoRound(input: {
       outcome.revealedDoors = []
       outcome.doorOutcomes = makeVaultHeistDoorOutcomes(serverSeed, clientSeed, session.id, vaultHeistProfile)
     }
+    if (input.slug === 'donut-division') {
+      const spin = generateInitialDonutSpin({
+        wagerCents: input.wagerCents,
+        rtpBps,
+        serverSeed,
+        clientSeed,
+        sessionId: session.id,
+      })
+      outcome.donutDivision = {
+        ...spin,
+        baseMultiplier: spin.rawMultiplier,
+        bonusChoice: null,
+        bonusSpinWins: spin.bonusGrids.map((grid) => ({
+          lineWins: evaluateDonutGrid(grid).lineWins,
+          rawMultiplier: evaluateDonutGrid(grid).rawMultiplier,
+        })),
+        cards: [],
+        picks: [],
+        picksRemaining: 3,
+      }
+      outcome.result = spin.result
+      if (spin.payoutCents !== null) outcome.payoutAmount = (spin.payoutCents / 100).toFixed(2)
+    }
 
     await client.query(
       `INSERT INTO public.game_results (bet_id, outcome, payout_amount, server_seed_hash)
@@ -616,6 +715,16 @@ export async function startCasinoRound(input: {
 
     if (input.slug === 'crash' && Number(outcome.crashPoint) <= 1) {
       await settleRound(client, { bet_id: betId, session_id: session.id }, input.userId, outcome, '0.00', 'loss')
+    }
+    if (input.slug === 'donut-division' && outcome.payoutAmount !== undefined) {
+      await settleRound(
+        client,
+        { bet_id: betId, session_id: session.id, slug: input.slug },
+        input.userId,
+        outcome,
+        String(outcome.payoutAmount),
+        Number(outcome.payoutAmount) > 0 ? 'win' : 'loss',
+      )
     }
 
     return roundView({
@@ -669,6 +778,130 @@ async function settleRound(
   }
 }
 
+function isDonutBonusChoice(value: string | undefined): value is DonutBonusChoice {
+  return DONUT_BONUS_CHOICES.some((choice) => choice === value)
+}
+
+async function playDonutDivisionAction(
+  client: PoolClient,
+  row: Record<string, any>,
+  input: { userId: string; sessionId: string; action: 'pick' | 'bonus'; position?: number; choiceId?: string; requestId?: string },
+) {
+  const outcome = parseOutcome(row.outcome)
+  const donut = parseOutcome(outcome.donutDivision)
+  if (input.requestId && outcome.lastActionRequestId === input.requestId) return roundView(row)
+  if (row.bet_status !== 'pending' || row.session_status !== 'active') throw new CasinoGameError('This round is already finished.', 409)
+  const serverSeed = String(outcome.serverSeed)
+  const clientSeed = String(outcome.clientSeed)
+  const rtpBps = Number(outcome.rtpBps)
+  const wagerCents = Number(outcome.wagerCents)
+  const baseMultiplier = Number(donut.baseMultiplier)
+
+  if (input.action === 'bonus') {
+    if (donut.bonusStage !== 'choose') throw new CasinoGameError('This round is not waiting for a bonus choice.', 409)
+    if (!isDonutBonusChoice(input.choiceId)) throw new CasinoGameError('Choose a valid Donut Division bonus.')
+    const choice = input.choiceId
+    const resolution = generateDonutBonus(choice, serverSeed, clientSeed, input.sessionId)
+    donut.bonusChoice = choice
+    donut.bonusStage = choice === 'pick' ? 'pick' : null
+    donut.bonusGrids = resolution.grids
+    donut.bonusMultipliers = resolution.multipliers
+    donut.bonusSpinWins = resolution.grids.map((grid, index) => {
+      const evaluation = evaluateDonutGrid(grid)
+      return { lineWins: evaluation.lineWins, rawMultiplier: evaluation.rawMultiplier * (resolution.multipliers[index] ?? 1) }
+    })
+    donut.cards = resolution.cards
+    donut.revealedCards = []
+    donut.picksRemaining = choice === 'pick' ? 3 : 0
+    outcome.donutDivision = donut
+    if (choice === 'pick') {
+      outcome.lastActionRequestId = input.requestId
+      await client.query(`UPDATE public.game_results SET outcome = $2::jsonb WHERE bet_id = $1::uuid`, [row.bet_id, JSON.stringify(outcome)])
+      return roundView({ ...row, outcome })
+    }
+
+    const payoutCents = finalizeDonutBonusPayout({
+      wagerCents,
+      rtpBps,
+      baseMultiplier,
+      bonusMultiplier: resolution.rawMultiplier,
+      choice,
+      serverSeed,
+      clientSeed,
+      sessionId: input.sessionId,
+    })
+    outcome.lastActionRequestId = input.requestId
+    outcome.payoutAmount = (payoutCents / 100).toFixed(2)
+    await settleRound(
+      client,
+      row,
+      input.userId,
+      outcome,
+      String(outcome.payoutAmount),
+      payoutCents > 0 ? 'win' : 'loss',
+    )
+    return roundView({
+      ...row,
+      outcome,
+      payout_amount: String(outcome.payoutAmount),
+      bet_status: 'settled',
+      session_status: 'completed',
+    })
+  }
+
+  if (donut.bonusStage !== 'pick' || donut.bonusChoice !== 'pick') {
+    throw new CasinoGameError('This round is not waiting for a bonus card pick.', 409)
+  }
+  if (!Number.isInteger(input.position) || input.position! < 0 || input.position! >= 12) {
+    throw new CasinoGameError('Choose one of the twelve case files.')
+  }
+  const cards = numberArray(donut.cards)
+  const picks = numberArray(outcome.picks)
+  if (cards.length !== 12 || picks.includes(input.position!)) {
+    throw new CasinoGameError('That case file has already been opened or is unavailable.', 409)
+  }
+  picks.push(input.position!)
+  outcome.picks = picks
+  const revealedCards = revealDonutCards(cards, picks)
+  donut.revealedCards = revealedCards
+  donut.picksRemaining = Math.max(0, 3 - picks.length)
+  outcome.donutDivision = donut
+  outcome.lastActionRequestId = input.requestId
+
+  if (picks.length < 3) {
+    await client.query(`UPDATE public.game_results SET outcome = $2::jsonb WHERE bet_id = $1::uuid`, [row.bet_id, JSON.stringify(outcome)])
+    return roundView({ ...row, outcome })
+  }
+
+  const bonusMultiplier = revealedCards.reduce((sum, card) => sum + card.value, 0)
+  const payoutCents = finalizeDonutBonusPayout({
+    wagerCents,
+    rtpBps,
+    baseMultiplier,
+    bonusMultiplier,
+    choice: 'pick',
+    serverSeed,
+    clientSeed,
+    sessionId: input.sessionId,
+  })
+  outcome.payoutAmount = (payoutCents / 100).toFixed(2)
+  await settleRound(
+    client,
+    row,
+    input.userId,
+    outcome,
+    String(outcome.payoutAmount),
+    payoutCents > 0 ? 'win' : 'loss',
+  )
+  return roundView({
+    ...row,
+    outcome,
+    payout_amount: String(outcome.payoutAmount),
+    bet_status: 'settled',
+    session_status: 'completed',
+  })
+}
+
 function multiplierForSafePicks(slug: CasinoGameSlug, picks: number, mineCount: number, rtpBps: number) {
   if (slug !== 'towers' && slug !== 'mines') throw new CasinoGameError('Safe-pick payout requested for an unsupported game.', 500)
   return payoutMultiplierForSafePicks(slug, picks, mineCount, rtpBps)
@@ -678,11 +911,26 @@ export async function playCasinoAction(input: {
   userId: string
   slug: CasinoGameSlug
   sessionId: string
-  action: 'pick' | 'cashout' | 'sync'
+  action: 'pick' | 'cashout' | 'sync' | 'bonus'
   position?: number
+  choiceId?: string
+  requestId?: string
 }): Promise<GameRoundView> {
   return withTransaction(async (client) => {
     const row = await loadRound(client, input.userId, input.slug, input.sessionId)
+    if (input.slug === 'donut-division') {
+      if (input.action === 'pick' || input.action === 'bonus') {
+        return playDonutDivisionAction(client, row, {
+          userId: input.userId,
+          sessionId: input.sessionId,
+          action: input.action,
+          position: input.position,
+          choiceId: input.choiceId,
+          requestId: input.requestId,
+        })
+      }
+      throw new CasinoGameError('Donut Division only accepts bonus choices and case-file picks.')
+    }
     if (row.bet_status !== 'pending' || row.session_status !== 'active') throw new CasinoGameError('This round is already finished.', 409)
     if (input.action === 'sync' && input.slug !== 'crash') throw new CasinoGameError('Round sync is only available for Crash.')
     const outcome = parseOutcome(row.outcome)

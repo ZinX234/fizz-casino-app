@@ -42,7 +42,7 @@ type Props = {
   kickIsLive: boolean
 }
 
-const supportedGames = new Set(['crash', 'mines', 'towers', 'vault-heist'])
+const supportedGames = new Set(['crash', 'mines', 'towers', 'vault-heist', 'donut-division'])
 const gameArtwork: Record<string, string> = {
   crash: '/games/fizz-crash-airplane.png',
   mines: '/games/fizz-mines.png',
@@ -54,6 +54,7 @@ const spotlights: Record<string, { eyebrow: string; title: string; detail: strin
   mines: { eyebrow: 'Fizz originals', title: 'Find the safe tiles', detail: 'Reveal gems and choose when to cash out.' },
   towers: { eyebrow: 'Fizz originals', title: 'Climb one row at a time', detail: 'Pick a safe column and keep climbing.' },
   'vault-heist': { eyebrow: 'Fizz original · flagship', title: 'Vault Heist', detail: 'Crack the doors. Beat the alarm. Choose your escape.' },
+  'donut-division': { eyebrow: 'Fizz originals · slots', title: 'Donut Division', detail: 'Match symbols across 25 paylines and investigate the bonus.' },
 }
 
 function FizzcoinBalance({ balance, currency }: { balance: string | null; currency: string | null }) {
@@ -216,7 +217,9 @@ function SpotlightRow({ games, currentPlayer }: { games: GameRecord[]; currentPl
         const spotlight = spotlights[game.slug] ?? { eyebrow: game.provider, title: game.name, detail: game.description }
         return (
           <Link key={game.id} href={currentPlayer ? `/games/${game.slug}` : `/auth/sign-in?returnTo=/games/${game.slug}`} aria-label={`${currentPlayer ? 'Open' : 'Sign in to play'} ${game.name}`} className="group relative isolate flex min-h-[184px] overflow-hidden rounded-lg bg-[#16171c] sm:min-h-[218px]">
-            <img src={gameArtwork[game.slug]} alt="" className="absolute inset-0 -z-20 size-full object-cover transition duration-500 group-hover:scale-[1.04]" />
+            {gameArtwork[game.slug]
+              ? <img src={gameArtwork[game.slug]} alt="" className="absolute inset-0 -z-20 size-full object-cover transition duration-500 group-hover:scale-[1.04]" />
+              : <div className="absolute inset-0 -z-20 bg-[radial-gradient(ellipse_at_50%_30%,rgba(244,188,99,.35),rgba(42,33,22,.95)_70%)]" />}
             <div className="absolute inset-0 -z-10 bg-gradient-to-r from-black/85 via-black/40 to-black/5" />
             <div className="flex max-w-[76%] flex-col justify-center px-4 py-4 sm:px-5">
               <span className="mb-2 w-fit rounded-sm bg-white/90 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-[#25232b]">{spotlight.eyebrow}</span>

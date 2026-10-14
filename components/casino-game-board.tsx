@@ -8,7 +8,7 @@ import { crashMultiplierAtElapsed } from '@/lib/crash-math'
 import { payoutMultiplierForSafePicks } from '@/lib/casino-payout-math'
 import { formatFizzcoins } from '@/lib/format-money'
 
-const gameNames = { crash: 'Crash', towers: 'Towers', mines: 'Mines', 'vault-heist': 'Vault Heist' } as const
+const gameNames = { crash: 'Crash', towers: 'Towers', mines: 'Mines', 'vault-heist': 'Vault Heist', 'donut-division': 'Donut Division' } as const
 
 type Props = {
   setting: GameRtpSetting
@@ -238,5 +238,7 @@ function payoutMultiplier(slug: 'mines' | 'towers', picks: number, mineCount: nu
 function gameDescription(slug: GameRtpSetting['slug']) {
   if (slug === 'crash') return 'Watch the multiplier climb, then cash out before the server-generated crash point.'
   if (slug === 'towers') return 'Pick one of three columns per row. One wrong pick ends the round; every safe row grows your payout.'
-  return 'Pick the mine count, reveal safe tiles, and cash out before you uncover a mine.'
+  if (slug === 'mines') return 'Pick the mine count, reveal safe tiles, and cash out before you uncover a mine.'
+  if (slug === 'donut-division') return 'Match symbols from the left across 25 paylines and choose a bonus investigation when scatters land.'
+  return 'Crack the doors. Beat the alarm. Choose your escape.'
 }
