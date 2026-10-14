@@ -1,4 +1,6 @@
 import React, { useId } from 'react';
+import { Image } from '@/components/ui/image';
+import { getSymbolImage } from '@/config/gameAssets';
 
 // Original Donut Division symbol art. Every icon is drawn from scratch as
 // flat vector shapes with heavy black outlines to match the game's look.
@@ -224,5 +226,11 @@ function symbolArt(id, uid) {
 
 export default function SymbolArt({ id, className = '' }) {
   const uid = useId().replace(/[:]/g, '');
+  const image = getSymbolImage(id);
+
+  // Supplied artwork wins; the vector library covers every other symbol.
+  if (image) {
+    return <Image src={image} alt="" fittingType="fill" className={className} />;
+  }
   return <div className={className}>{symbolArt(id, uid)}</div>;
 }

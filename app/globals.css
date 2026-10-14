@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
+@import './donut-division.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -27,6 +28,9 @@
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
+  --font-display: 'Luckiest Guy', 'Baloo 2', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Montserrat', ui-sans-serif, system-ui, sans-serif;
+  --font-heading: 'Baloo 2', ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {

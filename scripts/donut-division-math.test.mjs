@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import CONFIG from '../config/gameConfig.js'
 import {
   calculateDonutPayoutCents,
   donutGlobalScale,
@@ -7,6 +8,7 @@ import {
   generateDonutGrid,
   getDonutRtpModel,
 } from '../lib/donut-division-math.ts'
+import { wagerCentsFromFizzcoins } from '../lib/fizzcoin-wager.ts'
 
 test('the RTP model normalizes each bonus path to the same expected return', () => {
   const model = getDonutRtpModel()
@@ -37,4 +39,16 @@ test('fractional payouts round to a supported integer cent amount', () => {
   const payout = calculateDonutPayoutCents(101, 9600, 1.2345, 'test', 'server-seed', 'client-seed', 'session-id')
   assert.ok(Number.isSafeInteger(payout))
   assert.ok(payout >= 0)
+})
+
+test('every original Fizzcoin wager maps to a valid casino wager in cents', () => {
+  assert.equal(wagerCentsFromFizzcoins(800), 200)
+  for (const wager of CONFIG.bets.options) {
+    const cents = wagerCentsFromFizzcoins(wager)
+    assert.ok(Number.isInteger(cents))
+    assert.ok(cents >= 100 && cents <= 10_000)
+  }
+  assert.throws(() => wagerCentsFromFizzcoins(399), RangeError)
+  assert.throws(() => wagerCentsFromFizzcoins(401), RangeError)
+  assert.throws(() => wagerCentsFromFizzcoins(40_004), RangeError)
 })
