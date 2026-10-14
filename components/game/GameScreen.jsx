@@ -30,8 +30,8 @@ export default function GameScreen({ demo, onExit, initialRound, initialBalance,
       <DetectiveLeft className="pointer-events-none absolute bottom-[186px] left-[-4%] hidden h-[46vh] max-h-[420px] min-h-[260px] w-auto drop-shadow-[0_14px_22px_rgba(0,0,0,0.45)] md:block lg:left-[1%]" />
       <DetectiveRight className="pointer-events-none absolute bottom-[186px] right-[-4%] hidden h-[46vh] max-h-[420px] min-h-[260px] w-auto drop-shadow-[0_14px_22px_rgba(0,0,0,0.45)] md:block lg:right-[1%]" />
 
-      <main className="relative z-20 mx-auto flex min-h-screen w-full max-w-[1000px] flex-col items-center justify-start gap-1 px-3 pb-[196px] pt-[clamp(200px,24vh,210px)] md:pb-[136px] md:pt-[clamp(270px,35vh,300px)]">
-        <div className="w-full max-w-[min(900px,calc(100vw-40px))] shrink-0">
+      <main className="relative z-20 mx-auto flex min-h-screen w-full max-w-[620px] flex-col items-center justify-start gap-1 px-3 pb-[196px] pt-[clamp(200px,24vh,210px)] md:pb-[136px] md:pt-[clamp(280px,36vh,320px)]">
+        <div className="w-full max-w-[min(520px,calc(100vh-470px))] shrink-0">
           <ReelFrame>
             <div className="dd-game-reel-window relative w-full">
               <ReelGrid

@@ -15,7 +15,11 @@ export default function Reel({ reel, column, spinning, winKeys, spinId }) {
 
   return (
     <div className={cn('relative h-full min-h-0 min-w-0 w-full overflow-hidden bg-white', spinning ? 'dd-spinning' : 'dd-stopped')}>
-      <div className="dd-reel-strip" key={spinning ? 'spin' : 'stop'}>
+      <div
+        className="dd-reel-strip"
+        key={spinning ? 'spin' : 'stop'}
+        style={{ '--dd-reel-speed': `${CONFIG.animation.spinSpeed}ms` }}
+      >
         {cells.map((symbol, index) => (
           <div
             key={`${index}-${symbol}`}
