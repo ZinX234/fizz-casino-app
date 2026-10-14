@@ -10,6 +10,7 @@ import {
   getDonutRtpModel,
 } from '../lib/donut-division-math.ts'
 import { wagerCentsFromFizzcoins } from '../lib/fizzcoin-wager.ts'
+import { getWinningCells } from '../game/paylines.js'
 
 test('the RTP model normalizes each bonus path to the same expected return', () => {
   const model = getDonutRtpModel()
@@ -29,6 +30,18 @@ test('the uploaded 25-line paytable evaluates a five-of-a-kind board', () => {
   assert.equal(result.lineWins.length, 25)
   assert.equal(result.scatterCount, 0)
   assert.equal(result.rawMultiplier, 100)
+})
+
+test('casino win highlights follow the server paylines and include scatters', () => {
+  const grid = Array.from({ length: 5 }, () => Array(5).fill('SPRINKLE'))
+  grid[0][2] = 'PINK'
+  grid[1][2] = 'PINK'
+  grid[2][2] = 'PINK'
+  grid[4][4] = 'SCATTER'
+  assert.deepEqual(
+    getWinningCells(grid, [{ lineIndex: 0, count: 3 }]).sort(),
+    ['0-2', '1-2', '2-2', '4-4'],
+  )
 })
 
 test('server-seed inputs deterministically reproduce the same grid', () => {

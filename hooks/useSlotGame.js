@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CONFIG } from '@/config/gameConfig';
 import * as engine from '@/game/engine';
+import { getWinningCells } from '@/game/paylines';
 import { buildClueCards, getBonusChoice, gooeyWildCount, surveillanceMultiplier, surveillanceWildCount } from '@/game/bonus';
 import { sound } from '@/game/sound';
 import { formatCoins } from '@/game/format';
@@ -110,7 +111,7 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
     return nextRound;
   }, []);
 
-  const animateServerGrid = useCallback(async (nextGrid, alreadySpinning = false) => {
+  const animateServerGrid = useCallback(async (nextGrid, alreadySpinning = false, serverLineWins) => {
     setWinCells([]);
     setWinLines([]);
     if (!alreadySpinning) {
@@ -129,9 +130,14 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
     await sleep(speed(CONFIG.animation.postStop));
     setSpinning(false);
     const evaluation = engine.evaluateGrid(nextGrid, betRef.current);
-    setWinCells(evaluation.winCells);
-    setWinLines(evaluation.lineIndexes);
-    return evaluation;
+    const lineWins = serverLineWins ?? evaluation.wins;
+    const winCells = serverLineWins
+      ? getWinningCells(nextGrid, serverLineWins)
+      : evaluation.winCells;
+    const lineIndexes = lineWins.map((win) => win.lineIndex);
+    setWinCells(winCells);
+    setWinLines(lineIndexes);
+    return { ...evaluation, lineIndexes, winCells };
   }, [speed]);
 
   const showServerPayout = useCallback((serverRound) => {
@@ -256,8 +262,13 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
     setGooey({ stage: 'splatter', spots });
     await sleep(speed(1500));
     const evaluation = engine.evaluateGrid(enhanced, betRef.current);
-    setWinCells(evaluation.winCells);
-    setWinLines(evaluation.lineIndexes);
+    const serverLineWins = donut.bonusSpinWins[0]?.lineWins;
+    setWinCells(serverLineWins
+      ? getWinningCells(enhanced, serverLineWins)
+      : evaluation.winCells);
+    setWinLines(serverLineWins
+      ? serverLineWins.map((win) => win.lineIndex)
+      : evaluation.lineIndexes);
     setGooey(null);
     showServerPayout(serverRound);
   }, [showServerPayout, speed]);
@@ -291,7 +302,7 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
       throw new Error('The server returned an incomplete Donut Division round.');
     }
     startRequestId.current = null;
-    await animateServerGrid(donut.grid, true);
+    await animateServerGrid(donut.grid, true, donut.lineWins);
     if (donut.bonusStage === 'choose') {
       setBanner({ tier: 'BONUS', title: 'BONUS CHOICE', subtitle: 'Case files unlocked — choose your investigation' });
       setBonusChoice(true);

@@ -6,9 +6,10 @@ import { CONFIG } from '@/config/gameConfig';
 export default function ReelGrid({ grid, spinning, stoppedReels, winCells, spinId }) {
   return (
     <div
-      className="grid h-full w-full gap-[2px] bg-[#C9C9C9]"
+      className="grid h-full w-full grid-cols-5 grid-rows-1 gap-[2px] bg-[#C9C9C9]"
       style={{
         gridTemplateColumns: `repeat(${CONFIG.reels}, minmax(0, 1fr))`,
+        gridTemplateRows: 'minmax(0, 1fr)',
         '--dd-rows': CONFIG.rows,
       }}
     >

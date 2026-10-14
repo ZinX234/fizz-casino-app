@@ -25,26 +25,32 @@
   height: 100%;
   width: 100%;
   will-change: transform;
-  backface-visibility: hidden;
 }
 
 .dd-spinning .dd-reel-strip {
-  animation: dd-reel-roll var(--dd-reel-speed, 850ms) linear infinite;
+  animation: dd-reel-roll var(--dd-reel-speed, 240ms) linear infinite;
 }
 
 @keyframes dd-reel-roll {
-  from { transform: translate3d(0, 0, 0); }
-  to { transform: translate3d(0, -100%, 0); }
+  from { transform: translateY(0); }
+  to { transform: translateY(-50%); }
 }
 
 .dd-stopped .dd-reel-strip {
-  animation: dd-reel-bounce 300ms cubic-bezier(0.2, 0.7, 0.25, 1) both;
+  animation: dd-reel-bounce 430ms cubic-bezier(0.22, 0.86, 0.34, 1.2) both;
 }
 
 @keyframes dd-reel-bounce {
-  0% { transform: translate3d(0, -6%, 0); }
-  72% { transform: translate3d(0, 1%, 0); }
-  100% { transform: translate3d(0, 0, 0); }
+  0% { transform: translateY(-16%); }
+  58% { transform: translateY(3.5%); }
+  100% { transform: translateY(0); }
+}
+
+.dd-reel-cell > div,
+.dd-reel-cell svg {
+  display: block;
+  min-width: 0;
+  min-height: 0;
 }
 
 .dd-win-cell {

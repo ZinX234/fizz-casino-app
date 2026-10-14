@@ -29,4 +29,19 @@ export const PAYLINES = [
   [2, 1, 2, 1, 2],
 ];
 
+export function getWinningCells(grid, lineWins) {
+  const winningCells = new Set();
+  lineWins.forEach(({ lineIndex, count }) => {
+    const line = PAYLINES[lineIndex];
+    if (!line || !Number.isInteger(count)) return;
+    for (let reel = 0; reel < Math.min(count, line.length); reel += 1) {
+      winningCells.add(`${reel}-${line[reel]}`);
+    }
+  });
+  grid.forEach((column, reel) => column.forEach((symbol, row) => {
+    if (symbol === 'SCATTER') winningCells.add(`${reel}-${row}`);
+  }));
+  return [...winningCells];
+}
+
 export default PAYLINES;
