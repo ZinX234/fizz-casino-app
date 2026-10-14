@@ -16,7 +16,7 @@ export default function WinDisplay({ displayWin, winAmount, lines, demo, rtp, cl
     >
       <div className="flex items-baseline gap-2">
         <span className={cn('font-display text-[10px] tracking-[0.16em]', active ? 'text-[#151515]' : 'text-white/60')}>
-          WIN
+          PAYOUT
         </span>
         <span className={cn('font-display text-lg leading-none md:text-2xl', active ? 'text-[#151515]' : 'text-white/80')}>
           {formatCoins(displayWin)}

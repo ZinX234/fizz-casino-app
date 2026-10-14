@@ -10,7 +10,7 @@ import {
   getDonutRtpModel,
 } from '../lib/donut-division-math.ts'
 import { wagerCentsFromFizzcoins } from '../lib/fizzcoin-wager.ts'
-import { getWinningCells } from '../game/paylines.js'
+import { getWinningCells, getWinningLineWins } from '../game/paylines.js'
 
 test('the RTP model normalizes each bonus path to the same expected return', () => {
   const model = getDonutRtpModel()
@@ -41,6 +41,13 @@ test('win highlights include only matching paylines and qualifying scatter symbo
   assert.deepEqual(
     getWinningCells(grid, [{ lineIndex: 0, symbol: 'PINK', count: 3 }]).sort(),
     ['0-2', '1-2', '2-2'],
+  )
+  assert.deepEqual(
+    getWinningLineWins(grid, [
+      { lineIndex: 0, symbol: 'PINK', count: 3 },
+      { lineIndex: 1, symbol: 'CHOC', count: 3 },
+    ]),
+    [{ lineIndex: 0, symbol: 'PINK', count: 3 }],
   )
   assert.deepEqual(getWinningCells(grid, []), [])
   grid[0][2] = 'WILD'

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CONFIG } from '@/config/gameConfig';
 import * as engine from '@/game/engine';
-import { getWinningCells } from '@/game/paylines';
+import { getWinningCells, getWinningLineWins } from '@/game/paylines';
 import { buildClueCards, getBonusChoice, gooeyWildCount, surveillanceMultiplier, surveillanceWildCount } from '@/game/bonus';
 import { sound } from '@/game/sound';
 import { formatCoins } from '@/game/format';
@@ -130,9 +130,9 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
     await sleep(speed(CONFIG.animation.postStop));
     setSpinning(false);
     const evaluation = engine.evaluateGrid(nextGrid, betRef.current);
-    const lineWins = serverLineWins ?? evaluation.wins;
+    const lineWins = getWinningLineWins(nextGrid, serverLineWins ?? evaluation.wins);
     const winCells = serverLineWins
-      ? getWinningCells(nextGrid, serverLineWins)
+      ? getWinningCells(nextGrid, lineWins)
       : evaluation.winCells;
     const lineIndexes = lineWins.map((win) => win.lineIndex);
     setWinCells(winCells);
@@ -263,10 +263,11 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
     await sleep(speed(1500));
     const evaluation = engine.evaluateGrid(enhanced, betRef.current);
     const serverLineWins = donut.bonusSpinWins[0]?.lineWins;
+    const lineWins = getWinningLineWins(enhanced, serverLineWins ?? evaluation.wins);
     setWinCells(serverLineWins
-      ? getWinningCells(enhanced, serverLineWins)
+      ? getWinningCells(enhanced, lineWins)
       : evaluation.winCells);
-    setWinLines(serverLineWins ?? evaluation.wins);
+    setWinLines(lineWins);
     setGooey(null);
     showServerPayout(serverRound);
   }, [showServerPayout, speed]);
