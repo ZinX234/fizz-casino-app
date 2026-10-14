@@ -1,6 +1,4 @@
 import React, { useId } from 'react';
-import { Image } from '@/components/ui/image';
-import { getSymbolImage } from '@/config/gameAssets';
 
 // Original Donut Division symbol art. Every icon is drawn from scratch as
 // flat vector shapes with heavy black outlines to match the game's look.
@@ -154,6 +152,15 @@ function symbolArt(id, uid) {
           <path d="M35 66 h30 l2 9 h-34 z" fill="#FFF6E2" stroke={OUTLINE} strokeWidth="5" />
         </Tile>
       );
+    case 'REDLIGHT':
+      return (
+        <Tile bg="#F4D7CC">
+          <path d="M19 69 h62 l-5 17 H24 z" fill="#555B63" stroke={OUTLINE} strokeWidth="6" />
+          <path d="M28 65 q2 -31 22 -31 q20 0 22 31 z" fill="#E83E46" stroke={OUTLINE} strokeWidth="6" />
+          <path d="M36 55 q2 -12 10 -14" fill="none" stroke="#FFB0A8" strokeWidth="6" strokeLinecap="round" />
+          <path d="M50 22v-8m23 16 7-5M27 30l-7-5" stroke="#FFD44D" strokeWidth="4" strokeLinecap="round" />
+        </Tile>
+      );
     case 'COFFEE':
       return (
         <Tile bg="#FFE2C6">
@@ -226,11 +233,5 @@ function symbolArt(id, uid) {
 
 export default function SymbolArt({ id, className = '' }) {
   const uid = useId().replace(/[:]/g, '');
-  const image = getSymbolImage(id);
-
-  // Supplied artwork wins; the vector library covers every other symbol.
-  if (image) {
-    return <Image src={image} alt="" fittingType="fill" className={className} />;
-  }
   return <div className={className}>{symbolArt(id, uid)}</div>;
 }

@@ -29,7 +29,7 @@ export default function ControlBar({ game, onMenu, onSettings, onExitDemo }) {
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 border-t-[5px] border-[#151515] bg-[#161616]/95 backdrop-blur-md">
-      <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-2 px-2 py-2 md:flex-row md:items-center md:justify-between md:px-4">
+      <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-2 px-2 py-2 md:flex-row md:items-center md:justify-between md:px-4 md:py-0">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 md:gap-2">
             <IconButton label="Menu" onClick={onMenu}>

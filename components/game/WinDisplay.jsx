@@ -9,7 +9,7 @@ export default function WinDisplay({ displayWin, winAmount, lines, demo, rtp, cl
   return (
     <div
       className={cn(
-        'flex items-center justify-between gap-3 rounded-2xl border-[4px] border-[#151515] px-3 py-1.5',
+        'flex items-center justify-between gap-3 rounded-2xl border-[4px] border-[#151515] px-3 py-1',
         active ? 'bg-[#FFD44D]' : 'bg-[#221F1B]',
         className,
       )}
