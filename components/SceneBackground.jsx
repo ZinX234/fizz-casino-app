@@ -8,17 +8,11 @@ export const DESK_BG = 'https://media.db.com/images/public/6ac52dd61fb7f0e1d83cc
 // City street backdrop for the main game screen.
 export default function SceneBackground() {
   return (
-    <div className="absolute inset-0 overflow-hidden">
+    <div className="absolute inset-0 overflow-hidden bg-[#160b2b]">
       <img
         src={STREET_BG}
         alt=""
-        aria-hidden="true"
-        className="absolute inset-0 h-full w-full scale-110 object-cover object-center blur-xl brightness-75"
-      />
-      <img
-        src={STREET_BG}
-        alt=""
-        className="absolute inset-0 block h-full w-full object-contain object-top"
+        className="absolute inset-0 block h-full w-full object-cover object-center"
       />
     </div>
   );
