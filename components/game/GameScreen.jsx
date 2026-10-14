@@ -39,6 +39,7 @@ export default function GameScreen({ demo, onExit, initialRound, initialBalance,
                 spinning={game.spinning}
                 stoppedReels={game.stoppedReels}
                 winCells={game.winCells}
+                winLines={game.winLines}
                 spinId={game.spinId}
               />
               <GooeyOverlay gooey={game.gooey} />

@@ -28,7 +28,7 @@
 }
 
 .dd-spinning .dd-reel-strip {
-  animation: dd-reel-roll var(--dd-reel-speed, 850ms) linear infinite;
+  animation: dd-reel-roll var(--dd-reel-speed, 240ms) linear infinite;
 }
 
 @keyframes dd-reel-roll {

@@ -136,7 +136,7 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
       : evaluation.winCells;
     const lineIndexes = lineWins.map((win) => win.lineIndex);
     setWinCells(winCells);
-    setWinLines(lineIndexes);
+    setWinLines(lineWins);
     return { ...evaluation, lineIndexes, winCells };
   }, [speed]);
 
@@ -197,7 +197,7 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
     const total = evaluation.total * multiplier;
     if (total > 0) {
       setWinCells(evaluation.winCells);
-      setWinLines(evaluation.lineIndexes);
+      setWinLines(evaluation.wins);
       setWinAmount(total);
       countUp(total);
       sound.win(total / Math.max(currentBet, 0.01));
@@ -231,7 +231,7 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
     const evaluation = engine.evaluateGrid(nextGrid, betRef.current);
     if (evaluation.total > 0) {
       setWinCells(evaluation.winCells);
-      setWinLines(evaluation.lineIndexes);
+      setWinLines(evaluation.wins);
       setWinAmount(evaluation.total);
       countUp(evaluation.total);
       sound.win(evaluation.total / Math.max(betRef.current, 0.01));
@@ -266,9 +266,7 @@ export default function useSlotGame({ demo, initialRound = null, initialBalance 
     setWinCells(serverLineWins
       ? getWinningCells(enhanced, serverLineWins)
       : evaluation.winCells);
-    setWinLines(serverLineWins
-      ? serverLineWins.map((win) => win.lineIndex)
-      : evaluation.lineIndexes);
+    setWinLines(serverLineWins ?? evaluation.wins);
     setGooey(null);
     showServerPayout(serverRound);
   }, [showServerPayout, speed]);

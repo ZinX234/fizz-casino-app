@@ -44,4 +44,18 @@ export function getWinningCells(grid, lineWins) {
   return [...winningCells];
 }
 
+export function getWinningPaylinePoints(lineWins) {
+  return lineWins.flatMap(({ lineIndex, count }) => {
+    const line = PAYLINES[lineIndex];
+    if (!line || !Number.isInteger(count) || count < 3) return [];
+    return [{
+      lineIndex,
+      points: line.slice(0, Math.min(count, line.length)).map((row, reel) => [
+        reel * 100 + 50,
+        row * 100 + 50,
+      ]),
+    }];
+  });
+}
+
 export default PAYLINES;
