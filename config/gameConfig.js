@@ -103,7 +103,7 @@ export const CONFIG = {
     reelStopDelay: 520,
     reelStagger: 150,
     postStop: 280,
-    spinSpeed: 560,
+    spinSpeed: 850,
     quickFactor: 0.45,
     winCountMs: 900,
     featurePause: 700,
