@@ -32,38 +32,66 @@ test('the uploaded 25-line paytable evaluates a five-of-a-kind board', () => {
   assert.equal(result.rawMultiplier, 100)
 })
 
-test('win highlights include only matching paylines and qualifying scatter symbols', () => {
+test('paylines require exact matches from either end; wilds never substitute', () => {
   const grid = Array.from({ length: 5 }, () => Array(5).fill('SPRINKLE'))
   grid[0][2] = 'PINK'
   grid[1][2] = 'WILD'
   grid[2][2] = 'PINK'
   grid[4][4] = 'SCATTER'
+  assert.deepEqual(getWinningLineWins(grid, [{ lineIndex: 0, symbol: 'PINK', count: 3 }]), [])
+  assert.deepEqual(getWinningCells(grid, [{ lineIndex: 0, symbol: 'PINK', count: 3 }]), [])
+
+  grid[1][2] = 'PINK'
   assert.deepEqual(
-    getWinningCells(grid, [{ lineIndex: 0, symbol: 'PINK', count: 3 }]).sort(),
-    ['0-2', '1-2', '2-2'],
+    getWinningLineWins(grid, [{ lineIndex: 0, symbol: 'PINK', count: 3 }]),
+    [{ lineIndex: 0, symbol: 'PINK', count: 3, direction: 'left' }],
   )
+
+  grid[0][2] = 'SPRINKLE'
+  grid[1][2] = 'SPRINKLE'
+  grid[2][2] = 'PINK'
+  grid[3][2] = 'PINK'
+  grid[4][2] = 'PINK'
   assert.deepEqual(
-    getWinningLineWins(grid, [
-      { lineIndex: 0, symbol: 'PINK', count: 3 },
-      { lineIndex: 1, symbol: 'CHOC', count: 3 },
-    ]),
-    [{ lineIndex: 0, symbol: 'PINK', count: 3 }],
+    getWinningLineWins(grid, [{ lineIndex: 0, symbol: 'PINK', count: 3, direction: 'right' }]),
+    [{ lineIndex: 0, symbol: 'PINK', count: 3, direction: 'right' }],
   )
-  assert.deepEqual(getWinningCells(grid, []), [])
+
   grid[0][2] = 'WILD'
   grid[1][2] = 'WILD'
   grid[2][2] = 'WILD'
+  grid[3][2] = 'WILD'
+  grid[4][2] = 'PINK'
+  assert.deepEqual(getWinningLineWins(grid, [{ lineIndex: 0, symbol: 'WILD', count: 5 }]), [])
+  grid[4][2] = 'WILD'
   assert.deepEqual(
-    getWinningCells(grid, [{ lineIndex: 0, symbol: 'WILD', count: 3 }]).sort(),
-    ['0-2', '1-2', '2-2'],
+    getWinningLineWins(grid, [{ lineIndex: 0, symbol: 'WILD', count: 5, direction: 'right' }]),
+    [{ lineIndex: 0, symbol: 'WILD', count: 5, direction: 'right' }],
   )
+  assert.deepEqual(
+    getWinningCells(grid, [{ lineIndex: 0, symbol: 'WILD', count: 5, direction: 'right' }]).sort(),
+    ['0-2', '1-2', '2-2', '3-2', '4-2'],
+  )
+})
+
+test('server paytable evaluates exact symbols from both ends and wilds only as five', () => {
+  const grid = Array.from({ length: 5 }, () => Array(5).fill('SCATTER'))
   grid[0][2] = 'PINK'
-  grid[1][2] = 'WILD'
+  grid[1][2] = 'PINK'
   grid[2][2] = 'PINK'
-  grid[2][4] = 'SCATTER'
-  grid[3][1] = 'SCATTER'
-  assert.deepEqual(getWinningCells(grid, []).sort(), ['2-4', '3-1', '4-4'])
-  assert.deepEqual(getWinningCells(grid, [{ lineIndex: 0, count: 3, symbol: 'CHOC' }]).sort(), ['2-4', '3-1', '4-4'])
+  grid[3][2] = 'CHOC'
+  grid[4][2] = 'CHOC'
+  let lineWin = evaluateDonutGrid(grid).lineWins.find((win) => win.lineIndex === 0)
+  assert.deepEqual(lineWin, { lineIndex: 0, symbol: 'PINK', count: 3, multiplier: 12, direction: 'left' })
+
+  grid[0][2] = 'CHOC'
+  grid[1][2] = 'CHOC'
+  lineWin = evaluateDonutGrid(grid).lineWins.find((win) => win.lineIndex === 0)
+  assert.deepEqual(lineWin, { lineIndex: 0, symbol: 'CHOC', count: 3, multiplier: 15, direction: 'right' })
+
+  grid.forEach((column) => { column[2] = 'WILD' })
+  lineWin = evaluateDonutGrid(grid).lineWins.find((win) => win.lineIndex === 0)
+  assert.deepEqual(lineWin, { lineIndex: 0, symbol: 'WILD', count: 5, multiplier: 12500, direction: 'left' })
 })
 
 test('server-seed inputs deterministically reproduce the same grid', () => {

@@ -30,20 +30,36 @@ export const PAYLINES = [
 ];
 
 export function getWinningLineWins(grid, lineWins) {
-  return lineWins.filter(({ lineIndex, symbol, count }) => {
+  return lineWins.flatMap(({ lineIndex, symbol, count, direction, multiplier }) => {
     const line = PAYLINES[lineIndex];
-    if (!line || !Number.isInteger(count) || count < 3 || count > line.length) return false;
-    if (!symbol || symbol === 'SCATTER') return false;
-    return line.slice(0, count).every((row, reel) =>
-      grid[reel]?.[row] === symbol || (symbol !== 'WILD' && grid[reel]?.[row] === 'WILD'));
+    if (!line || !Number.isInteger(count) || count < 3 || count > line.length) return [];
+    if (!symbol || symbol === 'SCATTER' || (symbol === 'WILD' && count !== line.length)) return [];
+    const matchesDirection = (matchDirection) => {
+      const matched = Array.from({ length: count }, (_, offset) => {
+        const reel = matchDirection === 'left' ? offset : line.length - 1 - offset;
+        return grid[reel]?.[line[reel]] === symbol;
+      }).every(Boolean);
+      if (!matched) return false;
+      const nextOffset = count;
+      if (nextOffset === line.length) return true;
+      const nextReel = matchDirection === 'left' ? nextOffset : line.length - 1 - nextOffset;
+      return grid[nextReel]?.[line[nextReel]] !== symbol;
+    };
+    const resolvedDirection = direction === 'left' || direction === 'right'
+      ? (matchesDirection(direction) ? direction : null)
+      : matchesDirection('left') ? 'left' : matchesDirection('right') ? 'right' : null;
+    if (!resolvedDirection) return [];
+    const nextMultiplier = Number.isFinite(multiplier) ? multiplier : undefined;
+    return [{ lineIndex, symbol, count, direction: resolvedDirection, ...(nextMultiplier ? { multiplier: nextMultiplier } : {}) }];
   });
 }
 
 export function getWinningCells(grid, lineWins, minimumScatters = 3) {
   const winningCells = new Set();
-  getWinningLineWins(grid, lineWins).forEach(({ lineIndex, count }) => {
+  getWinningLineWins(grid, lineWins).forEach(({ lineIndex, count, direction }) => {
     const line = PAYLINES[lineIndex];
-    for (let reel = 0; reel < Math.min(count, line.length); reel += 1) {
+    for (let offset = 0; offset < Math.min(count, line.length); offset += 1) {
+      const reel = direction === 'left' ? offset : line.length - 1 - offset;
       winningCells.add(`${reel}-${line[reel]}`);
     }
   });

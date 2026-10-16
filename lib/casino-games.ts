@@ -25,6 +25,7 @@ const gameCatalog: Array<{ slug: CasinoGameSlug; name: string; description: stri
   { slug: 'mines', name: 'Mines', description: 'Choose the mine count, reveal safe tiles, and cash out whenever you want.' },
   { slug: 'vault-heist', name: 'Vault Heist', description: 'Crack a high-security vault, manage the alarm, and decide when to make your escape.' },
   { slug: 'donut-division', name: 'Donut Division', description: 'Match donut symbols across 25 paylines and choose a bonus investigation when scatters land.' },
+  { slug: 'fizz-rush', name: 'Fizz Rush', description: 'An endless tropical runner. Run as far as you can before the island claims you.' },
 ]
 
 export class CasinoGameError extends Error {
@@ -35,7 +36,7 @@ export class CasinoGameError extends Error {
 }
 
 function isGameSlug(value: string): value is CasinoGameSlug {
-  return value === 'crash' || value === 'towers' || value === 'mines' || value === 'vault-heist' || value === 'donut-division'
+  return value === 'crash' || value === 'towers' || value === 'mines' || value === 'vault-heist' || value === 'donut-division' || value === 'fizz-rush'
 }
 
 function readHouseEdge(configuration: unknown) {
@@ -79,13 +80,19 @@ export async function ensureBuiltInGames() {
        WHERE NOT (public.games.configuration ? 'vaultHeist')`,
     [gameCatalog[3].description, JSON.stringify({ houseEdgeBps: 400, vaultHeist: cloneDefaultVaultHeistConfig() })],
   )
+  await databasePool.query(
+    `INSERT INTO public.games (slug, name, provider, category, description, status, featured, configuration)
+     VALUES ('fizz-rush', 'Fizz Rush', 'Fizz Originals', 'other', $1, 'available', true, '{"houseEdgeBps":200}'::jsonb)
+     ON CONFLICT (slug) DO NOTHING`,
+    [gameCatalog[5].description],
+  )
 }
 
 export async function getBuiltInRtpSettings(): Promise<GameRtpSetting[]> {
   await ensureBuiltInGames()
   const { rows } = await databasePool.query<{ slug: CasinoGameSlug; name: string; configuration: unknown }>(
     `SELECT slug, name, configuration FROM public.games WHERE slug = ANY($1::text[])
-     ORDER BY CASE slug WHEN 'crash' THEN 1 WHEN 'towers' THEN 2 WHEN 'mines' THEN 3 WHEN 'vault-heist' THEN 4 ELSE 5 END`,
+     ORDER BY CASE slug WHEN 'crash' THEN 1 WHEN 'towers' THEN 2 WHEN 'mines' THEN 3 WHEN 'vault-heist' THEN 4 WHEN 'donut-division' THEN 5 ELSE 6 END`,
     [gameCatalog.map((game) => game.slug)],
   )
   return rows.filter((row) => isGameSlug(row.slug)).map((row) => {
@@ -430,10 +437,17 @@ function parseDonutLineWins(value: unknown) {
     const symbol = DONUT_SYMBOLS.find((candidate) => candidate === win.symbol)
     if (!symbol || !Number.isInteger(win.lineIndex) || Number(win.lineIndex) < 0 || Number(win.lineIndex) >= 25
       || !Number.isInteger(win.count) || Number(win.count) < 3 || Number(win.count) > 5
+      || (win.direction !== undefined && win.direction !== 'left' && win.direction !== 'right')
       || !Number.isFinite(win.multiplier) || Number(win.multiplier) <= 0) {
       throw new CasinoGameError('Donut Division line results are invalid.', 500)
     }
-    return { lineIndex: Number(win.lineIndex), symbol, count: Number(win.count), multiplier: Number(win.multiplier) }
+    return {
+      lineIndex: Number(win.lineIndex),
+      symbol,
+      count: Number(win.count),
+      multiplier: Number(win.multiplier),
+      direction: win.direction === 'right' ? 'right' : 'left',
+    }
   })
 }
 
@@ -531,6 +545,21 @@ function roundView(row: Record<string, any>): GameRoundView {
       serverSeed: String(outcome.serverSeed),
       clientSeed: String(outcome.clientSeed),
       commitment: row.server_seed_hash,
+    }
+  }
+  if (slug === 'fizz-rush') {
+    view.fizzRush = {
+      commitment: row.server_seed_hash,
+      rtpBps: Number(outcome.rtpBps),
+      houseEdgeBps: Number(outcome.houseEdgeBps),
+      maxCheckpoints: Number(outcome.maxCheckpoints ?? 300),
+      settled,
+      ...(settled
+        ? {
+            lethalCheckpoint: outcome.lethalCheckpoint === null ? null : Number(outcome.lethalCheckpoint),
+            serverSeed: String(outcome.serverSeed),
+          }
+        : {}),
     }
   }
   return view
@@ -758,6 +787,18 @@ export async function startCasinoRound(input: {
       }
       outcome.result = spin.result
       if (spin.payoutCents !== null) outcome.payoutAmount = (spin.payoutCents / 100).toFixed(2)
+    }
+    if (input.slug === 'fizz-rush') {
+      // Pre-commit the lethal checkpoint using the existing deterministicInteger function.
+      // lethalSlot == maxCheckpoints means "no lethal event this run".
+      const maxCheckpoints = 300 // 300 × 50 m = 15,000 m max
+      const lethalSlot = deterministicInteger(
+        serverSeed,
+        `fizz-rush:${clientSeed}:${session.id}:0`,
+        maxCheckpoints + 1,
+      )
+      outcome.maxCheckpoints = maxCheckpoints
+      outcome.lethalCheckpoint = lethalSlot < maxCheckpoints ? lethalSlot : null
     }
 
     await client.query(
@@ -991,6 +1032,27 @@ export async function playCasinoAction(input: {
 }): Promise<GameRoundView> {
   return withTransaction(async (client) => {
     const row = await loadRound(client, input.userId, input.slug, input.sessionId)
+    if (input.slug === 'fizz-rush') {
+      if (input.action !== 'cashout') throw new CasinoGameError('Fizz Rush only accepts the settle (cashout) action.')
+      if (row.bet_status !== 'pending' || row.session_status !== 'active') throw new CasinoGameError('This round is already finished.', 409)
+      const outcome = parseOutcome(row.outcome)
+      const rawMultiplier = typeof input.position === 'number' && Number.isFinite(input.position) ? input.position : 0
+      const rtpBps = Number(outcome.rtpBps)
+      // RTP is enforced directly: scaledMultiplier = rawMultiplier × (rtpBps / 10_000)
+      const scaledMultiplier = Math.max(0, rawMultiplier * (rtpBps / 10_000))
+      const payoutCents = Math.floor(Number(row.wager_amount) * scaledMultiplier * 100 + 1e-8)
+      const payoutAmount = (payoutCents / 100).toFixed(2)
+      outcome.rawMultiplier = rawMultiplier
+      outcome.scaledMultiplier = scaledMultiplier
+      await settleRound(client, row, input.userId, outcome, payoutAmount, payoutCents > 0 ? 'win' : 'loss')
+      return roundView({
+        ...row,
+        bet_status: 'settled',
+        session_status: 'completed',
+        payout_amount: payoutAmount,
+        outcome,
+      })
+    }
     if (input.slug === 'donut-division') {
       if (input.action === 'pick' || input.action === 'bonus') {
         return playDonutDivisionAction(client, row, {

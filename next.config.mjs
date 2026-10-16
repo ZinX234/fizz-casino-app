@@ -3,6 +3,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // Prevent Three.js from being bundled server-side
+  serverExternalPackages: ['three'],
   async headers() {
     return [{
       source: '/:path*',

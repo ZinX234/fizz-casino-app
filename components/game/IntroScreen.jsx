@@ -1,9 +1,8 @@
 import React from 'react';
-import { Image } from '@/components/ui/image';
 import DonutLogo from '@/components/art/DonutLogo';
 import ProvablyFairBadge from '@/components/game/ProvablyFairBadge';
 import FeatureCard from '@/components/game/FeatureCard';
-import { DESK_BG } from '@/components/SceneBackground';
+import { GAME_COVER_IMAGE } from '@/config/gameAssets';
 
 const CARDS = [
   {
@@ -35,8 +34,12 @@ export default function IntroScreen({ onContinue }) {
       }}
       className="relative min-h-screen w-full cursor-pointer overflow-hidden bg-[#F5F2E6] outline-none"
     >
-      <Image src={DESK_BG} alt="" className="absolute inset-0 block h-full w-full" fittingType="fill" />
-      <div className="absolute inset-0 bg-[#F5F2E6]/30" />
+      <img
+        src={GAME_COVER_IMAGE}
+        alt=""
+        className="absolute inset-0 h-full w-full object-cover object-[center_42%]"
+      />
+      <div className="absolute inset-0 bg-[#F5F2E6]/55" />
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-between gap-6 px-4 py-8">
         <header className="flex flex-col items-center gap-4">

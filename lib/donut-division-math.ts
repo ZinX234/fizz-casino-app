@@ -64,7 +64,7 @@ const PAYTABLE: Partial<Record<DonutSymbol, Partial<Record<number, number>>>> = 
   DET_C: { 3: 50, 4: 400, 5: 1_600 },
   DET_B: { 3: 75, 4: 600, 5: 2_500 },
   DET_A: { 3: 100, 4: 1_000, 5: 5_000 },
-  WILD: { 3: 150, 4: 2_000, 5: 12_500 },
+  WILD: { 5: 12_500 },
 }
 const SCATTER_PAYS: Record<number, number> = { 3: 2, 4: 10, 5: 50 }
 const PAYLINES: number[][] = [
@@ -88,7 +88,7 @@ type RtpModel = {
 }
 
 export type DonutGridEvaluation = {
-  lineWins: Array<{ lineIndex: number; symbol: DonutSymbol; count: number; multiplier: number }>
+  lineWins: Array<{ lineIndex: number; symbol: DonutSymbol; count: number; multiplier: number; direction: 'left' | 'right' }>
   scatterCount: number
   scatterMultiplier: number
   rawMultiplier: number
@@ -132,13 +132,15 @@ const eligibleProbability = reelSymbols.map((reel) => 1 - reel.find((item) => it
 function lineMultiplier(sequence: DonutSymbol[]) {
   let best = 0
   for (const symbol of REGULAR_SYMBOLS) {
-    let count = 0
-    for (let reel = 0; reel < REELS; reel += 1) {
-      const cell = sequence[reel]
-      if (cell !== symbol && !(cell === 'WILD' && symbol !== 'WILD')) break
-      count += 1
+    for (const direction of ['left', 'right'] as const) {
+      let count = 0
+      for (let offset = 0; offset < REELS; offset += 1) {
+        const reel = direction === 'left' ? offset : REELS - 1 - offset
+        if (sequence[reel] !== symbol) break
+        count += 1
+      }
+      if (count >= 3) best = Math.max(best, PAYTABLE[symbol]?.[count] ?? 0)
     }
-    if (count >= 3) best = Math.max(best, PAYTABLE[symbol]?.[count] ?? 0)
   }
   return best
 }
@@ -522,14 +524,18 @@ export function evaluateDonutGrid(grid: DonutGrid): DonutGridEvaluation {
   PAYLINES.forEach((line, lineIndex) => {
     let best: DonutGridEvaluation['lineWins'][number] | null = null
     for (const symbol of REGULAR_SYMBOLS) {
-      let count = 0
-      for (let reel = 0; reel < REELS; reel += 1) {
-        const cell = grid[reel][line[reel]]
-        if (cell !== symbol && !(cell === 'WILD' && symbol !== 'WILD')) break
-        count += 1
+      for (const direction of ['left', 'right'] as const) {
+        let count = 0
+        for (let offset = 0; offset < REELS; offset += 1) {
+          const reel = direction === 'left' ? offset : REELS - 1 - offset
+          if (grid[reel][line[reel]] !== symbol) break
+          count += 1
+        }
+        const multiplier = PAYTABLE[symbol]?.[count] ?? 0
+        if (count >= 3 && multiplier > (best?.multiplier ?? 0)) {
+          best = { lineIndex, symbol, count, multiplier, direction }
+        }
       }
-      const multiplier = PAYTABLE[symbol]?.[count] ?? 0
-      if (count >= 3 && multiplier > (best?.multiplier ?? 0)) best = { lineIndex, symbol, count, multiplier }
     }
     if (best) lineWins.push(best)
   })

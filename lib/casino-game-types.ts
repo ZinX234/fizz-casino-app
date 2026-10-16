@@ -1,6 +1,6 @@
 import type { VaultHeistOutcome } from '@/lib/vault-heist-config'
 
-export type CasinoGameSlug = 'crash' | 'towers' | 'mines' | 'vault-heist' | 'donut-division'
+export type CasinoGameSlug = 'crash' | 'towers' | 'mines' | 'vault-heist' | 'donut-division' | 'fizz-rush'
 
 export type GameRoundView = {
   sessionId: string
@@ -34,16 +34,25 @@ export type GameRoundView = {
   }
   donutDivision?: {
     grid: string[][]
-    lineWins: Array<{ lineIndex: number; symbol: string; count: number; multiplier: number }>
+    lineWins: Array<{ lineIndex: number; symbol: string; count: number; multiplier: number; direction: 'left' | 'right' }>
     scatterCount: number
     bonusStage: 'choose' | 'pick' | null
     bonusChoice: 'sticky' | 'pick' | 'surveillance' | null
     bonusGrids: string[][][]
     bonusMultipliers: number[]
-    bonusSpinWins: Array<{ lineWins: Array<{ lineIndex: number; symbol: string; count: number; multiplier: number }>; rawMultiplier: number }>
+    bonusSpinWins: Array<{ lineWins: Array<{ lineIndex: number; symbol: string; count: number; multiplier: number; direction: 'left' | 'right' }>; rawMultiplier: number }>
     revealedCards: Array<{ position: number; value: number }>
     picksRemaining: number
     feature: 'gooey' | 'maxWin' | null
+  }
+  fizzRush?: {
+    commitment: string
+    rtpBps: number
+    houseEdgeBps: number
+    maxCheckpoints: number
+    lethalCheckpoint?: number | null
+    serverSeed?: string
+    settled: boolean
   }
 }
 

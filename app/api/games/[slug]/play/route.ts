@@ -8,7 +8,7 @@ const requestSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('start'), requestId: z.string().uuid(), wagerCents: z.number().int(), mineCount: z.number().int().optional(), expectedRtpBps: z.number().int().min(100).max(9900), profileId: z.string().regex(/^[a-z0-9][a-z0-9-]{1,39}$/).optional(), buyBonus: z.boolean().optional() }).strict(),
   z.object({ action: z.literal('pick'), sessionId: z.string().uuid(), position: z.number().int(), requestId: z.string().uuid().optional() }).strict(),
   z.object({ action: z.literal('bonus'), sessionId: z.string().uuid(), requestId: z.string().uuid(), choiceId: z.enum(['sticky', 'pick', 'surveillance']) }).strict(),
-  z.object({ action: z.literal('cashout'), sessionId: z.string().uuid() }).strict(),
+  z.object({ action: z.literal('cashout'), sessionId: z.string().uuid(), position: z.number().finite().optional() }).strict(),
   z.object({ action: z.literal('sync'), sessionId: z.string().uuid() }).strict(),
   z.object({ action: z.literal('resume') }).strict(),
 ])
@@ -65,7 +65,7 @@ export async function POST(request: Request, context: { params: Promise<{ slug: 
         slug: rawSlug,
         sessionId: body.data.sessionId,
         action: body.data.action,
-        position: body.data.action === 'pick' ? body.data.position : undefined,
+        position: body.data.action === 'pick' ? body.data.position : body.data.action === 'cashout' ? body.data.position : undefined,
         choiceId: body.data.action === 'bonus' ? body.data.choiceId : undefined,
         requestId: 'requestId' in body.data ? body.data.requestId : undefined,
       })
