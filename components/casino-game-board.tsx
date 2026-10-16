@@ -8,7 +8,7 @@ import { crashMultiplierAtElapsed } from '@/lib/crash-math'
 import { payoutMultiplierForSafePicks } from '@/lib/casino-payout-math'
 import { formatFizzcoins } from '@/lib/format-money'
 
-const gameNames = { crash: 'Crash', towers: 'Towers', mines: 'Mines', 'vault-heist': 'Vault Heist', 'donut-division': 'Donut Division' } as const
+const gameNames = { crash: 'Crash', towers: 'Towers', mines: 'Mines', 'vault-heist': 'Vault Heist', 'donut-division': 'Donut Division', 'fizz-rush': 'Fizz Rush' } as const
 
 type Props = {
   setting: GameRtpSetting
