@@ -42,7 +42,7 @@ type Props = {
   kickIsLive: boolean
 }
 
-const supportedGames = new Set(['crash', 'mines', 'towers', 'vault-heist', 'donut-division'])
+const supportedGames = new Set(['crash', 'mines', 'towers', 'vault-heist', 'donut-division', 'fizz-rush'])
 const gameArtwork: Record<string, string> = {
   crash: '/games/fizz-crash-airplane.png',
   mines: '/games/fizz-mines.png',
@@ -56,6 +56,7 @@ const spotlights: Record<string, { eyebrow: string; title: string; detail: strin
   towers: { eyebrow: 'Fizz originals', title: 'Climb one row at a time', detail: 'Pick a safe column and keep climbing.' },
   'vault-heist': { eyebrow: 'Fizz original · flagship', title: 'Vault Heist', detail: 'Crack the doors. Beat the alarm. Choose your escape.' },
   'donut-division': { eyebrow: 'Fizz originals · slots', title: 'Donut Division', detail: 'Match symbols across 25 paylines and investigate the bonus.' },
+  'fizz-rush': { eyebrow: 'Fizz originals · runner', title: 'Fizz Rush', detail: 'Run as far as you can before the island claims you.' },
 }
 
 function FizzcoinBalance({ balance, currency }: { balance: string | null; currency: string | null }) {
