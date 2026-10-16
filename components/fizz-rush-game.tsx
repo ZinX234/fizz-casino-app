@@ -162,6 +162,7 @@ export function FizzRushGame({ setting, initialRound, initialBalance, currency, 
       })
       try {
         game.init()
+        game.play()
       } catch {
         setFatal('This device could not start the 3D renderer. Try enabling hardware acceleration.')
         return
