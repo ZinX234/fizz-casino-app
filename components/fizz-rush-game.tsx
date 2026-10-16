@@ -41,7 +41,7 @@ export function FizzRushGame({ setting, initialRound, initialBalance, currency, 
   const settleRef = useRef<((res: any) => Promise<void>) | null>(null)
 
   const [phase, setPhase] = useState<'intro' | 'setup' | 'running' | 'paused' | 'over'>(
-    initialRound ? 'running' : 'intro',
+    'intro',
   )
   const [hud, setHud] = useState<any>(null)
   const [notices, setNotices] = useState<any[]>([])
