@@ -31,13 +31,7 @@ export const CONFIG = {
     DET_C: { id: 'DET_C', label: 'Sergeant Bloom', tier: 'high', pay: { 3: 50, 4: 400, 5: 1600 } },
     DET_B: { id: 'DET_B', label: 'Captain Nova', tier: 'high', pay: { 3: 75, 4: 600, 5: 2500 } },
     DET_A: { id: 'DET_A', label: 'Officer', tier: 'high', pay: { 3: 100, 4: 1000, 5: 5000 } },
-    WILD: {
-      id: 'WILD',
-      label: 'Gooey Wild',
-      tier: 'special',
-      pay: { 3: 150, 4: 2000, 5: 12500 },
-      substitutes: true,
-    },
+    WILD: { id: 'WILD', label: 'Gooey Wild', tier: 'special', pay: { 5: 12500 } },
     SCATTER: {
       id: 'SCATTER',
       label: 'Case File Scatter',

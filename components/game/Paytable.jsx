@@ -25,9 +25,11 @@ export default function Paytable() {
               </p>
               <p className="font-body text-[10px] font-bold leading-tight text-[#151515]/70">
                 {pays
-                  ? `5 of a kind ${pays[5]}x · 4 ${pays[4]}x · 3 ${pays[3]}x line bet`
+                  ? id === 'WILD'
+                    ? `5 matching wilds ${pays[5]}x line bet`
+                    : `5 of a kind ${pays[5]}x · 4 ${pays[4]}x · 3 ${pays[3]}x line bet`
                   : '3 or more anywhere: 2x / 10x / 50x total bet'}
-                {id === 'WILD' ? ' — substitutes for every symbol' : ''}
+                {id === 'WILD' ? ' — no substitutions' : ''}
               </p>
             </div>
           </li>

@@ -29,8 +29,8 @@ export default function MenuPanel({ onClose, onExit, rtp }) {
         <section className="mb-4 rounded-2xl border-[4px] border-[#151515] bg-white/80 p-3">
           <h3 className="mb-1 font-display text-sm tracking-[0.14em] text-[#151515]">HOW TO PLAY</h3>
           <ul className="list-disc space-y-1 pl-4 font-body text-[11px] font-semibold leading-snug text-[#151515]/85 md:text-xs">
-            <li>Match 3 or more identical symbols from the leftmost reel on any of the {CONFIG.lineCount} lines.</li>
-            <li>Gooey wilds stand in for every regular symbol; five wilds pay the top prize.</li>
+            <li>Match 3 or more identical symbols from either end of any of the {CONFIG.lineCount} lines.</li>
+            <li>Wilds never substitute for other symbols; all 5 wilds on a line pay the wild prize.</li>
             <li>Land {CONFIG.features.bonus.minScatters}+ case file scatters anywhere to choose a bonus investigation.</li>
             <li>Gooey is Good can strike on any spin and spray extra wilds across the reels.</li>
             <li>Demo Play never touches a balance — wins there are for show only.</li>

@@ -69,26 +69,32 @@ export function evaluateGrid(grid, bet) {
   PAYLINES.forEach((line, lineIndex) => {
     let best = null;
     REGULAR_IDS.forEach((symbolId) => {
-      let count = 0;
-      for (let reel = 0; reel < CONFIG.reels; reel += 1) {
-        const cell = grid[reel][line[reel]];
-        const matches = cell === symbolId || (cell === 'WILD' && symbolId !== 'WILD');
-        if (!matches) break;
-        count += 1;
-      }
-      if (count < 3) return;
-      const multiplier = CONFIG.symbols[symbolId].pay[count];
-      if (!multiplier) return;
-      const amount = multiplier * lineBet;
-      if (!best || amount > best.amount) {
-        best = {
-          lineIndex,
-          symbol: symbolId,
-          count,
-          amount,
-          positions: Array.from({ length: count }, (_, reel) => [reel, line[reel]]),
-        };
-      }
+      ['left', 'right'].forEach((direction) => {
+        let count = 0;
+        for (let offset = 0; offset < CONFIG.reels; offset += 1) {
+          const reel = direction === 'left' ? offset : CONFIG.reels - 1 - offset;
+          if (grid[reel][line[reel]] !== symbolId) break;
+          count += 1;
+        }
+        if (symbolId === 'WILD' && count < CONFIG.reels) return;
+        if (count < 3) return;
+        const multiplier = CONFIG.symbols[symbolId].pay[count];
+        if (!multiplier) return;
+        const amount = multiplier * lineBet;
+        if (!best || amount > best.amount) {
+          best = {
+            lineIndex,
+            symbol: symbolId,
+            count,
+            direction,
+            amount,
+            positions: Array.from({ length: count }, (_, offset) => {
+              const reel = direction === 'left' ? offset : CONFIG.reels - 1 - offset;
+              return [reel, line[reel]];
+            }),
+          };
+        }
+      });
     });
     if (best) wins.push(best);
   });
