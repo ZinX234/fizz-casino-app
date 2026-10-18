@@ -127,7 +127,7 @@ function SiteHeader({ currentPlayer }: Pick<CasinoHomeProps, 'currentPlayer'>) {
 }
 
 function GameCard({ game }: { game: GameRecord }) {
-  const playable = game.slug === 'crash' || game.slug === 'towers' || game.slug === 'mines'
+  const playable = game.slug === 'crash' || game.slug === 'towers' || game.slug === 'mines' || game.slug === 'fizz-rush'
   const card = (
     <article className={`group overflow-hidden rounded-[22px] border border-white/[0.08] bg-[#12141a] transition duration-300 ${playable ? 'hover:-translate-y-1 hover:border-amber-200/25 hover:shadow-[0_20px_55px_-35px_rgba(244,188,99,.22)]' : ''}`}>
       <div className="relative aspect-[1.35/1] overflow-hidden bg-[radial-gradient(ellipse_at_60%_40%,rgba(93,77,112,.44),rgba(25,26,32,.2)_52%,rgba(15,16,21,.95)_100%)]">
