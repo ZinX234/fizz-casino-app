@@ -117,7 +117,7 @@ export function FizzRushGame({ setting, initialRound, initialBalance, currency, 
       }
 
       try {
-        await commitRun({ result: res, difficulty, mode: 'real' })
+        await commitRun({ result: res, difficulty, mode: 'real', displayName: playerName })
       } catch {
         // progression save failure is non-critical
       }
@@ -391,13 +391,21 @@ export function FizzRushGame({ setting, initialRound, initialBalance, currency, 
       <BackButton />
       <div ref={mountRef} className="h-full w-full" />
       {hud && phase === 'running' && (
-        <GameHud hud={hud} notices={notices} flash={flash} />
+        <GameHud
+          hud={hud}
+          notices={notices}
+          onPause={() => setPhase('paused')}
+          showTouch={false}
+          onAction={() => {}}
+          large={false}
+        />
       )}
       {phase === 'paused' && gameRef.current && (
         <PauseOverlay
-          game={gameRef.current}
           onResume={() => { gameRef.current?.resume(); setPhase('running') }}
+          onRestart={() => { gameRef.current?.dispose(); gameRef.current = null; setPhase('intro') }}
           onQuit={() => { gameRef.current?.dispose(); gameRef.current = null; setPhase('intro') }}
+          canRestart={false}
         />
       )}
       {fatal && (

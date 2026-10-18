@@ -446,7 +446,7 @@ function parseDonutLineWins(value: unknown) {
       symbol,
       count: Number(win.count),
       multiplier: Number(win.multiplier),
-      direction: win.direction === 'right' ? 'right' : 'left',
+      direction: (win.direction === 'right' ? 'right' : 'left') as 'left' | 'right',
     }
   })
 }
