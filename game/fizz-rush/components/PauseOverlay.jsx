@@ -1,6 +1,6 @@
-﻿import { Play, RotateCcw, Home, Volume2, VolumeX, Gauge } from 'lucide-react';
-import { GAME_CONFIG } from '@/game/fizz-rush/game/config';
-import { settingsStore, useSettings } from '@/game/fizz-rush/game/settings';
+import { Play, RotateCcw, Home, Volume2, VolumeX, Gauge } from 'lucide-react';
+import { GAME_CONFIG } from '@/game/config';
+import { settingsStore, useSettings } from '@/game/settings';
 import { cn } from '@/lib/utils';
 
 /** Pause menu with quick audio and graphics controls. */

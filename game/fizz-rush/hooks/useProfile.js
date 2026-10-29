@@ -1,6 +1,6 @@
-﻿import { useEffect, useState } from 'react';
-import { loadProfile, saveProfile, applyRun, emptyProfile } from '@/game/fizz-rush/game/profile';
-import { getIdentity } from '@/game/fizz-rush/game/identity';
+import { useEffect, useState } from 'react';
+import { loadProfile, saveProfile, applyRun, emptyProfile } from '@/game/profile';
+import { getIdentity } from '@/game/identity';
 
 /**
  * Shared profile state.

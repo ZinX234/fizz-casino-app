@@ -44,7 +44,7 @@ export type GameRoundView = {
     revealedCards: Array<{ position: number; value: number }>
     picksRemaining: number
     feature: 'gooey' | 'maxWin' | null
-  }
+  },
   fizzRush?: {
     commitment: string
     rtpBps: number
@@ -53,7 +53,11 @@ export type GameRoundView = {
     lethalCheckpoint?: number | null
     serverSeed?: string
     settled: boolean
-  }
+    difficulty: string
+    wagerCents: number
+    mode: string
+    betCents: number
+  },
 }
 
 export type GameRtpSetting = {
@@ -62,4 +66,6 @@ export type GameRtpSetting = {
   houseEdgeBps: number
   rtpBps: number
   bonusBuyMultiplier?: number
+  difficulty?: string
+  betCents?: number
 }

@@ -49,6 +49,8 @@ export class Game {
     this.prestige = options.prestige || 0;
     this.characterId = options.characterId || 'fizz';
     this.trail = findTrail(options.trailId);
+    this.rtpBps = options.rtpBps || 9500;
+    this.houseEdgeBps = options.houseEdgeBps || 500;
 
     this.onHud = options.onHud;
     this.onGameOver = options.onGameOver;
@@ -342,6 +344,17 @@ export class Game {
       else runner.handle(action);
     });
     this.input.update(dt);
+
+    // ----------------------------------------------------- house edge instant kill
+    // The longer you run, the more likely the house edge catches you.
+    // Probability scales with houseEdgeBps and distance run.
+    if (this.mode === 'real' && this.houseEdgeBps > 0 && runner.status !== 'crashed') {
+      const killChance = (this.houseEdgeBps / 10000) * (this.runTime / 60) * 0.02;
+      if (Math.random() < killChance) {
+        this.finish('crash');
+        return;
+      }
+    }
 
     // -------------------------------------------------------- world growth
     const horizon = runner.z + GAME_CONFIG.world.segments * GAME_CONFIG.world.segmentLength;

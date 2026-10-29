@@ -1,5 +1,5 @@
-﻿import { Pause, Coins, Gem, Shield, Gauge, Zap, TrendingUp, Footprints } from 'lucide-react';
-import { GAME_CONFIG } from '@/game/fizz-rush/game/config';
+import { Pause, Coins, Gem, Shield, Gauge, Zap, TrendingUp, Footprints } from 'lucide-react';
+import { GAME_CONFIG } from '@/game/config';
 import { cn } from '@/lib/utils';
 
 const TONE = {
