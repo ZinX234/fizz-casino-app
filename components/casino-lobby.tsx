@@ -415,6 +415,7 @@ function GameShelf({ games, dataError, currentPlayer, onSlotArena }: { games: Ga
 
 export function CasinoLobby({ games, dataError, currentPlayer, kickIsLive }: Props) {
   const [slotArenaOpen, setSlotArenaOpen] = useState(false)
+  const [slotArenaError, setSlotArenaError] = useState(false)
   return (
     <div className="min-h-screen bg-[#090a0d] text-white">
       <LobbyRail />
@@ -448,23 +449,37 @@ export function CasinoLobby({ games, dataError, currentPlayer, kickIsLive }: Pro
           <div className="relative mx-4 w-full max-w-[1100px] max-h-[90vh] overflow-hidden rounded-xl border border-white/10 shadow-2xl">
             <button
               type="button"
-              onClick={() => setSlotArenaOpen(false)}
+              onClick={() => {
+                setSlotArenaOpen(false)
+                setSlotArenaError(false)
+              }}
               aria-label="Close Slot Arena"
               className="absolute top-2 right-2 z-10 size-8 rounded-full bg-white/10 p-1.5 text-white hover:bg-white/20 transition"
             >
               <X aria-hidden="true" className="size-5" />
             </button>
-            <iframe
-              src="https://fizzslotarena.lovable.app/"
-              title="Slot Arena"
-              className="size-full block"
-              allowFullScreen
-              loading="lazy"
-            />
+            {slotArenaError ? (
+              <div className="size-full flex flex-col items-center justify-center p-8 text-center bg-[#14151a]">
+                <p className="mb-2 text-red-400 font-semibold">Unable to load Slot Arena</p>
+                <p className="text-xs text-white/45 max-w-xs">The game could not be embedded. This usually means the Slot Arena site blocks iframe embedding.</p>
+              </div>
+            ) : (
+              <iframe
+                src="https://fizzslotarena.lovable.app/"
+                title="Slot Arena"
+                className="size-full block"
+                allowFullScreen
+                loading="lazy"
+                onError={() => setSlotArenaError(true)}
+              />
+            )}
           </div>
           <button
             type="button"
-            onClick={() => setSlotArenaOpen(false)}
+            onClick={() => {
+              setSlotArenaOpen(false)
+              setSlotArenaError(false)
+            }}
             aria-label="Close backdrop"
             className="absolute inset-0 z-10"
           />
