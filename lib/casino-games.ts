@@ -68,6 +68,12 @@ export async function ensureBuiltInGames() {
     [gameCatalog[0].description, gameCatalog[1].description, gameCatalog[2].description, gameCatalog[4].description],
   )
   await databasePool.query(
+    `INSERT INTO public.games (slug, name, provider, category, description, status, featured, configuration)
+     VALUES ('slot-arena', 'Slot Arena', 'Fizz Originals', 'slots', $1, 'available', true, '{"externalUrl":"https://fizzslotarena.lovable.app/"}'::jsonb)
+     ON CONFLICT (slug) DO NOTHING`,
+    ['Spin the reels in the neon-lit Slot Arena arena and chase big wins.'],
+  )
+  await databasePool.query(
     `UPDATE public.games
      SET configuration = configuration || jsonb_build_object('bonusBuyMultiplier', $1::int)
      WHERE slug = 'donut-division' AND NOT (configuration ? 'bonusBuyMultiplier')`,
@@ -554,10 +560,6 @@ function roundView(row: Record<string, any>): GameRoundView {
       houseEdgeBps: Number(outcome.houseEdgeBps),
       maxCheckpoints: Number(outcome.maxCheckpoints ?? 300),
       settled,
-      difficulty: String(outcome.difficulty ?? 'hard'),
-      wagerCents: Number(outcome.wagerCents ?? 100),
-      mode: String(outcome.mode ?? 'real'),
-      betCents: Number(outcome.wagerCents ?? 100),
       ...(settled
         ? {
             lethalCheckpoint: outcome.lethalCheckpoint === null ? null : Number(outcome.lethalCheckpoint),

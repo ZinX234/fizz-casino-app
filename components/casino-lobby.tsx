@@ -19,6 +19,7 @@ import {
   Star,
   Trophy,
   UserRound,
+  X,
 } from 'lucide-react'
 import { AffiliateCard } from '@/components/affiliate-card'
 import type { GameRecord } from '@/lib/casino-data'
@@ -42,14 +43,15 @@ type Props = {
   kickIsLive: boolean
 }
 
-const supportedGames = new Set(['crash', 'mines', 'towers', 'vault-heist', 'donut-division'])
+const supportedGames = new Set(['crash', 'mines', 'towers', 'vault-heist', 'donut-division', 'fizz-rush', 'slot-arena'])
 const gameArtwork: Record<string, string> = {
   crash: '/games/fizz-crash-airplane.png',
   mines: '/games/fizz-mines.png',
   towers: '/games/fizz-towers.png',
   'vault-heist': '/games/vault-heist-bg.png',
   'donut-division': '/games/donut-division-cover.png',
-
+  'fizz-rush': '/games/fizz-rush-cover.png',
+  'slot-arena': '/games/slot-arena-cover.png',
 }
 const spotlights: Record<string, { eyebrow: string; title: string; detail: string }> = {
   crash: { eyebrow: 'Fizz originals', title: 'Ride the multiplier', detail: 'Cash out before the round ends.' },
@@ -57,6 +59,8 @@ const spotlights: Record<string, { eyebrow: string; title: string; detail: strin
   towers: { eyebrow: 'Fizz originals', title: 'Climb one row at a time', detail: 'Pick a safe column and keep climbing.' },
   'vault-heist': { eyebrow: 'Fizz original · flagship', title: 'Vault Heist', detail: 'Crack the doors. Beat the alarm. Choose your escape.' },
   'donut-division': { eyebrow: 'Fizz originals · slots', title: 'Donut Division', detail: 'Match symbols across 25 paylines and investigate the bonus.' },
+  'fizz-rush': { eyebrow: 'Fizz originals · runner', title: 'Fizz Rush', detail: 'Run as far as you can before the island claims you.' },
+  'slot-arena': { eyebrow: 'Fizz originals · slots', title: 'Slot Arena', detail: 'Spin the reels in the neon-lit arena.' },
 }
 
 function FizzcoinBalance({ balance, currency }: { balance: string | null; currency: string | null }) {
@@ -209,7 +213,7 @@ function ProgressCard({ player }: { player: LobbyPlayer | null }) {
   )
 }
 
-function SpotlightRow({ games, currentPlayer }: { games: GameRecord[]; currentPlayer: LobbyPlayer | null }) {
+function SpotlightRow({ games, currentPlayer, onSlotArena }: { games: GameRecord[]; currentPlayer: LobbyPlayer | null; onSlotArena: () => void }) {
   const spotlitGames = games.filter((game) => supportedGames.has(game.slug)).slice(0, 3)
   if (!spotlitGames.length) return null
 
@@ -217,6 +221,31 @@ function SpotlightRow({ games, currentPlayer }: { games: GameRecord[]; currentPl
     <section aria-label="Fizz originals spotlight" className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
       {spotlitGames.map((game) => {
         const spotlight = spotlights[game.slug] ?? { eyebrow: game.provider, title: game.name, detail: game.description }
+        if (game.slug === 'slot-arena') {
+          return (
+            <div key={game.id} className="relative isolate flex min-h-[184px] overflow-hidden rounded-lg bg-[#16171c] sm:min-h-[218px]">
+              <button
+                onClick={(e) => {
+                  e.preventDefault()
+                  onSlotArena()
+                }}
+                aria-label={`Open ${game.name} game`}
+                className="block w-full h-full"
+              >
+                {gameArtwork[game.slug]
+                  ? <img src={gameArtwork[game.slug]} alt="" className="absolute inset-0 -z-20 size-full object-cover transition duration-500 group-hover:scale-[1.04]" />
+                  : <div className="absolute inset-0 -z-20 bg-[radial-gradient(ellipse_at_50%_30%,rgba(244,188,99,.35),rgba(42,33,22,.95)_70%)]" />}
+                <div className="absolute inset-0 -z-10 bg-gradient-to-r from-black/85 via-black/40 to-black/5" />
+                <div className="flex max-w-[76%] flex-col justify-center px-4 py-4 sm:px-5">
+                  <span className="mb-2 w-fit rounded-sm bg-white/90 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-[#25232b]">{spotlight.eyebrow}</span>
+                  <h2 className="text-[18px] font-black uppercase leading-[1.04] tracking-[-0.03em] text-white sm:text-[20px]">{spotlight.title}</h2>
+                  <p className="mt-2 max-w-[220px] text-[11px] leading-4 text-white/75">{spotlight.detail}</p>
+                </div>
+                <span className="absolute bottom-3 right-3 inline-flex size-8 items-center justify-center rounded-full bg-black/35 text-white/90 transition group-hover:bg-[#6e24f4]"><ChevronRight aria-hidden="true" className="size-4" /></span>
+              </button>
+            </div>
+          )
+        }
         return (
           <Link key={game.id} href={currentPlayer ? `/games/${game.slug}` : `/auth/sign-in?returnTo=/games/${game.slug}`} aria-label={`${currentPlayer ? 'Open' : 'Sign in to play'} ${game.name}`} className="group relative isolate flex min-h-[184px] overflow-hidden rounded-lg bg-[#16171c] sm:min-h-[218px]">
             {gameArtwork[game.slug]
@@ -246,7 +275,7 @@ function gameMatchesFilter(game: GameRecord, filter: string) {
   return false
 }
 
-function GameCard({ game, currentPlayer, canPlay }: { game: GameRecord; currentPlayer: LobbyPlayer | null; canPlay: boolean }) {
+function GameCard({ game, currentPlayer, canPlay, onSlotArena }: { game: GameRecord; currentPlayer: LobbyPlayer | null; canPlay: boolean; onSlotArena?: () => void }) {
   const isSupported = supportedGames.has(game.slug)
   const card = (
     <article className={`group relative flex-none snap-start overflow-hidden rounded-[9px] border bg-[#14151a] transition duration-200 ${canPlay ? 'border-white/[0.11] hover:-translate-y-0.5 hover:border-[#ae77ff]/70 hover:shadow-[0_12px_30px_-18px_rgba(143,75,255,.6)]' : 'border-white/[0.08]'}`}>
@@ -273,12 +302,28 @@ function GameCard({ game, currentPlayer, canPlay }: { game: GameRecord; currentP
     </article>
   )
 
+  if (game.slug === 'slot-arena') {
+    return (
+      <div className="relative">
+        <button
+          onClick={(e) => {
+            e.preventDefault()
+            onSlotArena?.()
+          }}
+          aria-label={`Open ${game.name} game`}
+          className="block"
+        >
+          {card}
+        </button>
+      </div>
+    )
+  }
   if (currentPlayer && isSupported) return <Link href={`/games/${game.slug}`} aria-label={`Open ${game.name} game`}>{card}</Link>
   if (!currentPlayer && isSupported) return <Link href={`/auth/sign-in?returnTo=/games/${game.slug}`} aria-label={`Sign in to play ${game.name}`}>{card}</Link>
   return card
 }
 
-function GameShelf({ games, dataError, currentPlayer }: { games: GameRecord[]; dataError: boolean; currentPlayer: LobbyPlayer | null }) {
+function GameShelf({ games, dataError, currentPlayer, onSlotArena }: { games: GameRecord[]; dataError: boolean; currentPlayer: LobbyPlayer | null; onSlotArena: () => void }) {
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
   const rail = useRef<HTMLDivElement>(null)
@@ -353,7 +398,7 @@ function GameShelf({ games, dataError, currentPlayer }: { games: GameRecord[]; d
       ) : visibleGames.length ? (
         <div className="relative">
           <div ref={rail} className="flex snap-x gap-3 overflow-x-auto pb-3 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.18)_transparent]">
-            {visibleGames.map((game) => <div key={game.id} className="w-[145px] shrink-0 snap-start sm:w-[155px] xl:w-[168px]"><GameCard game={game} currentPlayer={currentPlayer} canPlay={canPlay(game)} /></div>)}
+            {visibleGames.map((game) => <div key={game.id} className="w-[145px] shrink-0 snap-start sm:w-[155px] xl:w-[168px]"><GameCard game={game} currentPlayer={currentPlayer} canPlay={canPlay(game)} onSlotArena={onSlotArena} /></div>)}
           </div>
           <p className="mt-1 text-[10px] text-white/35">{visibleGames.length} {visibleGames.length === 1 ? 'game' : 'games'}</p>
         </div>
@@ -369,6 +414,7 @@ function GameShelf({ games, dataError, currentPlayer }: { games: GameRecord[]; d
 }
 
 export function CasinoLobby({ games, dataError, currentPlayer, kickIsLive }: Props) {
+  const [slotArenaOpen, setSlotArenaOpen] = useState(false)
   return (
     <div className="min-h-screen bg-[#090a0d] text-white">
       <LobbyRail />
@@ -385,8 +431,8 @@ export function CasinoLobby({ games, dataError, currentPlayer, kickIsLive }: Pro
         }}
       >
         <div className="mx-auto flex max-w-[1280px] flex-col gap-4 px-3 pb-24 pt-5 sm:gap-5 sm:px-5 sm:pt-6">
-          <SpotlightRow games={games} currentPlayer={currentPlayer} />
-          <GameShelf games={games} dataError={dataError} currentPlayer={currentPlayer} />
+          <SpotlightRow games={games} currentPlayer={currentPlayer} onSlotArena={() => setSlotArenaOpen(true)} />
+          <GameShelf games={games} dataError={dataError} currentPlayer={currentPlayer} onSlotArena={() => setSlotArenaOpen(true)} />
           <ProgressCard player={currentPlayer} />
           <AffiliateCard />
           <section className="flex flex-col gap-3 border-t border-white/[0.07] pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -397,6 +443,33 @@ export function CasinoLobby({ games, dataError, currentPlayer, kickIsLive }: Pro
         </div>
       </main>
 
+      {slotArenaOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Slot Arena">
+          <div className="relative mx-4 w-full max-w-[1100px] max-h-[90vh] overflow-hidden rounded-xl border border-white/10 shadow-2xl">
+            <button
+              type="button"
+              onClick={() => setSlotArenaOpen(false)}
+              aria-label="Close Slot Arena"
+              className="absolute top-2 right-2 z-10 size-8 rounded-full bg-white/10 p-1.5 text-white hover:bg-white/20 transition"
+            >
+              <X aria-hidden="true" className="size-5" />
+            </button>
+            <iframe
+              src="https://fizzslotarena.lovable.app/"
+              title="Slot Arena"
+              className="size-full block"
+              allowFullScreen
+              loading="lazy"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setSlotArenaOpen(false)}
+            aria-label="Close backdrop"
+            className="absolute inset-0 z-10"
+          />
+        </div>
+      )}
     </div>
   )
 }
