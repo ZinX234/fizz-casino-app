@@ -560,6 +560,10 @@ function roundView(row: Record<string, any>): GameRoundView {
       houseEdgeBps: Number(outcome.houseEdgeBps),
       maxCheckpoints: Number(outcome.maxCheckpoints ?? 300),
       settled,
+      difficulty: 'hard',
+      mode: 'real',
+      wagerCents: Number(outcome.wagerCents),
+      betCents: Number(outcome.wagerCents),
       ...(settled
         ? {
             lethalCheckpoint: outcome.lethalCheckpoint === null ? null : Number(outcome.lethalCheckpoint),
