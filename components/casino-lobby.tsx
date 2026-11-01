@@ -51,7 +51,7 @@ const gameArtwork: Record<string, string> = {
   'vault-heist': '/games/vault-heist-bg.png',
   'donut-division': '/games/donut-division-cover.png',
   'fizz-rush': '/games/fizz-rush-cover.png',
-  'slot-arena': '/games/slot-arena-cover.png',
+  'slot-arena': 'https://lh3.googleusercontent.com/d/1jogj7-OyeU0LxmsB2QfP_oV1COQ-IilC',
 }
 const spotlights: Record<string, { eyebrow: string; title: string; detail: string }> = {
   crash: { eyebrow: 'Fizz originals', title: 'Ride the multiplier', detail: 'Cash out before the round ends.' },
