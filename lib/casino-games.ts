@@ -62,16 +62,13 @@ export async function ensureBuiltInGames() {
        ('crash', 'Crash', 'Fizz Originals', 'other', $1, 'available', true, '{"houseEdgeBps":200}'::jsonb),
        ('towers', 'Towers', 'Fizz Originals', 'other', $2, 'available', true, '{"houseEdgeBps":200}'::jsonb),
        ('mines', 'Mines', 'Fizz Originals', 'other', $3, 'available', true, '{"houseEdgeBps":200}'::jsonb),
-       ('donut-division', 'Donut Division', 'Fizz Originals', 'slots', $4, 'available', true, '{"houseEdgeBps":200,"bonusBuyMultiplier":100}'::jsonb)
-     ON CONFLICT (slug) DO UPDATE SET configuration = public.games.configuration || EXCLUDED.configuration
+       ('donut-division', 'Donut Division', 'Fizz Originals', 'slots', $4, 'available', true, '{"houseEdgeBps":200,"bonusBuyMultiplier":100}'::jsonb),
+       ('slot-arena', 'Slot Arena', 'Fizz Originals', 'slots', $5, 'available', true, '{"externalUrl":"https://fizzslotarena.lovable.app/"}'::jsonb)
+     ON CONFLICT (slug) DO UPDATE SET configuration = public.games.configuration || EXCLUDED.configuration,
+       status = EXCLUDED.status,
+       featured = EXCLUDED.featured
        WHERE NOT (public.games.configuration ? 'houseEdgeBps')`,
-    [gameCatalog[0].description, gameCatalog[1].description, gameCatalog[2].description, gameCatalog[4].description],
-  )
-  await databasePool.query(
-    `INSERT INTO public.games (slug, name, provider, category, description, status, featured, configuration)
-     VALUES ('slot-arena', 'Slot Arena', 'Fizz Originals', 'slots', $1, 'available', true, '{"externalUrl":"https://fizzslotarena.lovable.app/"}'::jsonb)
-     ON CONFLICT (slug) DO NOTHING`,
-    ['Spin the reels in the neon-lit Slot Arena arena and chase big wins.'],
+    [gameCatalog[0].description, gameCatalog[1].description, gameCatalog[2].description, gameCatalog[4].description, 'Spin the reels in the neon-lit Slot Arena arena and chase big wins.'],
   )
   await databasePool.query(
     `UPDATE public.games
