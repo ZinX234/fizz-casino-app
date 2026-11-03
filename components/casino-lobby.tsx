@@ -454,7 +454,7 @@ export function CasinoLobby({ games, dataError, currentPlayer, kickIsLive }: Pro
                 setSlotArenaError(false)
               }}
               aria-label="Close Slot Arena"
-              className="absolute top-2 right-2 z-10 size-8 rounded-full bg-white/10 p-1.5 text-white hover:bg-white/20 transition"
+              className="absolute top-2 left-2 z-10 size-8 rounded-full bg-white/10 p-1.5 text-white hover:bg-white/20 transition"
             >
               <X aria-hidden="true" className="size-5" />
             </button>
