@@ -446,7 +446,7 @@ export function CasinoLobby({ games, dataError, currentPlayer, kickIsLive }: Pro
 
       {slotArenaOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Slot Arena">
-          <div className="relative mx-4 w-full max-w-[1100px] max-h-[90vh] overflow-hidden rounded-xl border border-white/10 shadow-2xl">
+          <div className="relative mx-4 w-full max-w-[1100px] h-[90vh] overflow-hidden rounded-xl border border-white/10 shadow-2xl">
             <button
               type="button"
               onClick={() => {
