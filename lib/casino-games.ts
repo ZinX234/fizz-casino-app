@@ -1,0 +1,1237 @@
+import 'server-only'
+
+import { createHash, createHmac, randomBytes } from 'node:crypto'
+import type { PoolClient } from 'pg'
+import { databasePool, withTransaction } from '@/lib/db'
+import type { CasinoGameSlug, GameRoundView, GameRtpSetting } from '@/lib/casino-game-types'
+import { xpForFizzcoinWager } from '@/lib/progression'
+import { crashMultiplierAtElapsed } from '@/lib/crash-math'
+import { payoutMultiplierForSafePicks } from '@/lib/casino-payout-math'
+import { assertVaultHeistConfig, cloneDefaultVaultHeistConfig, payoutMultiplierForRtp, payoutMultiplierForVaultPick, sanitizeVaultHeistConfig, type VaultHeistConfig, type VaultHeistOutcome, type VaultHeistProfile } from '@/lib/vault-heist-config'
+import { DONUT_BONUS_CHOICES, DONUT_SYMBOLS, evaluateDonutGrid, finalizeDonutBonusPayout, generateDonutBonus, generateDonutBonusPurchaseSpin, generateInitialDonutSpin, getDonutRtpModel, revealDonutCards, type DonutBonusChoice, type DonutGrid } from '@/lib/donut-division-math'
+
+export const CASINO_OWNER_EMAIL = 'benarch80@gmail.com'
+const MIN_EDGE_BPS = 100
+const MAX_EDGE_BPS = 9900
+const MAX_WAGER_CENTS = 10_000
+const DEFAULT_DONUT_BONUS_BUY_MULTIPLIER = 100
+const MAX_DONUT_BONUS_BUY_MULTIPLIER = 100
+const MAX_SAFE_PICKS = 8
+const CRASH_MAX_MULTIPLIER = 1000
+
+const gameCatalog: Array<{ slug: CasinoGameSlug; name: string; description: string }> = [
+  { slug: 'crash', name: 'Crash', description: 'Cash out before the multiplier crashes. The displayed RTP applies to new rounds.' },
+  { slug: 'towers', name: 'Towers', description: 'Climb eight rows, choosing a safe column on each step.' },
+  { slug: 'mines', name: 'Mines', description: 'Choose the mine count, reveal safe tiles, and cash out whenever you want.' },
+  { slug: 'vault-heist', name: 'Vault Heist', description: 'Crack a high-security vault, manage the alarm, and decide when to make your escape.' },
+  { slug: 'donut-division', name: 'Donut Division', description: 'Match donut symbols across 25 paylines and choose a bonus investigation when scatters land.' },
+  { slug: 'fizz-rush', name: 'Fizz Rush', description: 'An endless tropical runner. Run as far as you can before the island claims you.' },
+]
+
+export class CasinoGameError extends Error {
+  constructor(message: string, readonly status = 400) {
+    super(message)
+    this.name = 'CasinoGameError'
+  }
+}
+
+function isGameSlug(value: string): value is CasinoGameSlug {
+  return value === 'crash' || value === 'towers' || value === 'mines' || value === 'vault-heist' || value === 'donut-division' || value === 'fizz-rush'
+}
+
+function readHouseEdge(configuration: unknown) {
+  const value = configuration && typeof configuration === 'object' && 'houseEdgeBps' in configuration
+    ? Number((configuration as { houseEdgeBps: unknown }).houseEdgeBps)
+    : 200
+  return Number.isInteger(value) && value >= MIN_EDGE_BPS && value <= MAX_EDGE_BPS ? value : 200
+}
+
+function readDonutBonusBuyMultiplier(configuration: unknown) {
+  const value = configuration && typeof configuration === 'object' && 'bonusBuyMultiplier' in configuration
+    ? Number((configuration as { bonusBuyMultiplier: unknown }).bonusBuyMultiplier)
+    : DEFAULT_DONUT_BONUS_BUY_MULTIPLIER
+  return Number.isInteger(value) && value >= 1 && value <= MAX_DONUT_BONUS_BUY_MULTIPLIER
+    ? value
+    : DEFAULT_DONUT_BONUS_BUY_MULTIPLIER
+}
+
+export async function ensureBuiltInGames() {
+  await databasePool.query(
+    `INSERT INTO public.games (slug, name, provider, category, description, status, featured, configuration)
+     VALUES
+       ('crash', 'Crash', 'Fizz Originals', 'other', $1, 'available', true, '{"houseEdgeBps":200}'::jsonb),
+       ('towers', 'Towers', 'Fizz Originals', 'other', $2, 'available', true, '{"houseEdgeBps":200}'::jsonb),
+       ('mines', 'Mines', 'Fizz Originals', 'other', $3, 'available', true, '{"houseEdgeBps":200}'::jsonb),
+       ('donut-division', 'Donut Division', 'Fizz Originals', 'slots', $4, 'available', true, '{"houseEdgeBps":200,"bonusBuyMultiplier":100}'::jsonb),
+       ('slot-arena', 'Slot Arena', 'Fizz Originals', 'slots', $5, 'available', true, '{"externalUrl":"https://fizzslotarena.lovable.app/"}'::jsonb)
+     ON CONFLICT (slug) DO UPDATE SET configuration = public.games.configuration || EXCLUDED.configuration,
+       status = EXCLUDED.status,
+       featured = EXCLUDED.featured
+       WHERE NOT (public.games.configuration ? 'houseEdgeBps')`,
+    [gameCatalog[0].description, gameCatalog[1].description, gameCatalog[2].description, gameCatalog[4].description, 'Spin the reels in the neon-lit Slot Arena arena and chase big wins.'],
+  )
+  await databasePool.query(
+    `UPDATE public.games
+     SET configuration = configuration || jsonb_build_object('bonusBuyMultiplier', $1::int)
+     WHERE slug = 'donut-division' AND NOT (configuration ? 'bonusBuyMultiplier')`,
+    [DEFAULT_DONUT_BONUS_BUY_MULTIPLIER],
+  )
+  await databasePool.query(
+    `INSERT INTO public.games (slug, name, provider, category, description, status, featured, configuration)
+     VALUES ('vault-heist', 'Vault Heist', 'Fizz Originals', 'other', $1, 'available', true, $2::jsonb)
+     ON CONFLICT (slug) DO UPDATE SET configuration = public.games.configuration || jsonb_build_object('vaultHeist', EXCLUDED.configuration->'vaultHeist')
+       WHERE NOT (public.games.configuration ? 'vaultHeist')`,
+    [gameCatalog[3].description, JSON.stringify({ houseEdgeBps: 400, vaultHeist: cloneDefaultVaultHeistConfig() })],
+  )
+  await databasePool.query(
+    `INSERT INTO public.games (slug, name, provider, category, description, status, featured, configuration)
+     VALUES ('fizz-rush', 'Fizz Rush', 'Fizz Originals', 'other', $1, 'available', true, '{"houseEdgeBps":200}'::jsonb)
+     ON CONFLICT (slug) DO NOTHING`,
+    [gameCatalog[5].description],
+  )
+}
+
+export async function getBuiltInRtpSettings(): Promise<GameRtpSetting[]> {
+  await ensureBuiltInGames()
+  const { rows } = await databasePool.query<{ slug: CasinoGameSlug; name: string; configuration: unknown }>(
+    `SELECT slug, name, configuration FROM public.games WHERE slug = ANY($1::text[])
+     ORDER BY CASE slug WHEN 'crash' THEN 1 WHEN 'towers' THEN 2 WHEN 'mines' THEN 3 WHEN 'vault-heist' THEN 4 WHEN 'donut-division' THEN 5 ELSE 6 END`,
+    [gameCatalog.map((game) => game.slug)],
+  )
+  return rows.filter((row) => isGameSlug(row.slug)).map((row) => {
+    const configuration = parseOutcome(row.configuration)
+    const vaultConfiguration = row.slug === 'vault-heist' ? sanitizeVaultHeistConfig(configuration.vaultHeist) : null
+    const activeProfile = vaultConfiguration?.profiles.find((profile) => profile.id === vaultConfiguration.activeProfileId)
+    const rtpBps = activeProfile?.rtpBps ?? (10_000 - readHouseEdge(row.configuration))
+    return {
+      slug: row.slug,
+      name: row.name,
+      houseEdgeBps: 10_000 - rtpBps,
+      rtpBps,
+      ...(row.slug === 'donut-division'
+        ? { bonusBuyMultiplier: readDonutBonusBuyMultiplier(row.configuration) }
+        : {}),
+    }
+  })
+}
+
+export async function getBuiltInRtpSetting(slug: CasinoGameSlug): Promise<GameRtpSetting | null> {
+  const settings = await getBuiltInRtpSettings()
+  return settings.find((setting) => setting.slug === slug) ?? null
+}
+
+export async function getVaultHeistConfiguration(): Promise<VaultHeistConfig> {
+  await ensureBuiltInGames()
+  const { rows } = await databasePool.query<{ configuration: unknown }>(
+    `SELECT configuration FROM public.games WHERE slug = 'vault-heist' AND status = 'available' LIMIT 1`,
+  )
+  return sanitizeVaultHeistConfig(parseOutcome(rows[0]?.configuration).vaultHeist)
+}
+
+export async function updateVaultHeistConfiguration(actorUserId: string, configuration: VaultHeistConfig) {
+  try {
+    assertVaultHeistConfig(configuration)
+  } catch (error) {
+    throw new CasinoGameError(error instanceof Error ? error.message : 'Vault Heist settings are invalid.')
+  }
+  return withTransaction(async (client) => {
+    const { rows } = await client.query<{ id: string; configuration: unknown }>(
+      `SELECT id::text, configuration FROM public.games WHERE slug = 'vault-heist' FOR UPDATE`,
+    )
+    const game = rows[0]
+    if (!game) throw new CasinoGameError('Vault Heist settings were not found.', 404)
+    const previous = sanitizeVaultHeistConfig(parseOutcome(game.configuration).vaultHeist)
+    await client.query(
+      `UPDATE public.games SET configuration = configuration || jsonb_build_object('vaultHeist', $2::jsonb), updated_at = now() WHERE id = $1::uuid`,
+      [game.id, JSON.stringify(configuration)],
+    )
+    await client.query(
+      `INSERT INTO public.audit_logs (actor_user_id, action, entity_type, entity_id, details)
+       VALUES ($1, 'game.vault-heist.updated', 'game', $2, $3::jsonb)`,
+      [actorUserId, game.id, JSON.stringify({ previousProfileCount: previous.profiles.length, profileCount: configuration.profiles.length, activeProfileId: configuration.activeProfileId, theme: configuration.theme })],
+    )
+    return configuration
+  })
+}
+
+export async function getVaultHeistLeaderboard() {
+  const { rows } = await databasePool.query<{
+    today: { name: string; payout: string; multiplier: number } | null
+    all_time: { name: string; payout: string; multiplier: number } | null
+    highest_multiplier: { name: string; payout: string; multiplier: number } | null
+    longest_streak: { name: string; streak: number } | null
+    recent: Array<{ name: string; payout: string; multiplier: number; createdAt: string }>
+  }>(
+    `WITH escapes AS (
+       SELECT b.user_id, coalesce(nullif(u.name, ''), 'Player') AS name,
+              b.wager_amount::numeric AS wager, b.payout_amount::numeric AS payout,
+              coalesce((gr.outcome->>'cashoutMultiplier')::numeric, 1) AS multiplier,
+              b.created_at, gr.outcome->>'result' AS result
+       FROM public.bets b
+       JOIN public.game_sessions gs ON gs.id = b.game_session_id
+       JOIN public.games g ON g.id = b.game_id
+       JOIN public.game_results gr ON gr.bet_id = b.id
+       JOIN neon_auth."user" u ON u.id = b.user_id
+       WHERE g.slug = 'vault-heist' AND b.status = 'settled' AND b.payout_amount > 0
+     ), streak_rows AS (
+       SELECT name, result, row_number() OVER (PARTITION BY user_id ORDER BY created_at)
+         - row_number() OVER (PARTITION BY user_id, result ORDER BY created_at) AS streak_group
+       FROM escapes
+     ), streaks AS (
+       SELECT name, count(*)::int AS streak FROM streak_rows WHERE result = 'win'
+       GROUP BY name, streak_group ORDER BY streak DESC LIMIT 1
+     )
+     SELECT
+       (SELECT jsonb_build_object('name', name, 'payout', payout::text, 'multiplier', multiplier)
+        FROM escapes WHERE created_at >= date_trunc('day', now()) ORDER BY payout DESC LIMIT 1) AS today,
+       (SELECT jsonb_build_object('name', name, 'payout', payout::text, 'multiplier', multiplier)
+        FROM escapes ORDER BY payout DESC LIMIT 1) AS all_time,
+       (SELECT jsonb_build_object('name', name, 'payout', payout::text, 'multiplier', multiplier)
+        FROM escapes ORDER BY multiplier DESC, payout DESC LIMIT 1) AS highest_multiplier,
+       (SELECT jsonb_build_object('name', name, 'streak', streak) FROM streaks) AS longest_streak,
+       coalesce((SELECT jsonb_agg(jsonb_build_object('name', name, 'payout', payout::text, 'multiplier', multiplier, 'createdAt', created_at)
+         ORDER BY created_at DESC) FROM (SELECT * FROM escapes ORDER BY created_at DESC LIMIT 8) recent_escapes), '[]'::jsonb) AS recent`,
+  )
+  return rows[0] ?? { today: null, all_time: null, highest_multiplier: null, longest_streak: null, recent: [] }
+}
+
+export async function getCasinoAdminAccess(userId: string, sessionEmail: string | null | undefined) {
+  if (!sessionEmail || sessionEmail.trim().toLowerCase() !== CASINO_OWNER_EMAIL) {
+    return { authorized: false }
+  }
+
+  return withTransaction(async (client) => {
+    const { rows: inserted } = await client.query<{ user_id: string }>(
+      `INSERT INTO public.user_roles (user_id, role_id, granted_by)
+       SELECT u.id, 'admin', u.id FROM neon_auth."user" u
+       WHERE u.id = $1 AND lower(u.email) = lower($2)
+         AND EXISTS (SELECT 1 FROM public.roles WHERE id = 'admin')
+       ON CONFLICT (user_id, role_id) DO NOTHING
+       RETURNING user_id::text`,
+      [userId, CASINO_OWNER_EMAIL],
+    )
+
+    if (inserted[0]) {
+      await client.query(
+        `INSERT INTO public.audit_logs (actor_user_id, action, entity_type, entity_id, details)
+         VALUES ($1::uuid, 'admin.role.bootstrapped', 'user', $3::text, jsonb_build_object('email', $2::text))`,
+        [userId, CASINO_OWNER_EMAIL, userId],
+      )
+    }
+
+    const { rows } = await client.query<{ authorized: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM public.user_roles ur
+         JOIN public.roles r ON r.id = ur.role_id
+         JOIN neon_auth."user" u ON u.id = ur.user_id
+         WHERE ur.user_id = $1 AND ur.role_id = 'admin' AND lower(u.email) = lower($2)
+       ) AS authorized`,
+      [userId, CASINO_OWNER_EMAIL],
+    )
+    return { authorized: rows[0]?.authorized === true }
+  })
+}
+
+export async function updateBuiltInHouseEdge(
+  actorUserId: string,
+  slug: CasinoGameSlug,
+  houseEdgeBps: number,
+  bonusBuyMultiplier?: number,
+) {
+  if (!Number.isInteger(houseEdgeBps) || houseEdgeBps < MIN_EDGE_BPS || houseEdgeBps > MAX_EDGE_BPS || houseEdgeBps % 10 !== 0) {
+    throw new CasinoGameError('House edge must be between 1% and 99%, in 0.1% increments.')
+  }
+  if (bonusBuyMultiplier !== undefined
+    && (slug !== 'donut-division' || !Number.isInteger(bonusBuyMultiplier)
+      || bonusBuyMultiplier < 1 || bonusBuyMultiplier > MAX_DONUT_BONUS_BUY_MULTIPLIER)) {
+    throw new CasinoGameError('Donut Division bonus buy multiplier must be between 1× and 100×.')
+  }
+
+  if (slug === 'vault-heist') {
+    return withTransaction(async (client) => {
+      const { rows } = await client.query<{ id: string; name: string; configuration: unknown }>(
+        `SELECT id::text, name, configuration FROM public.games WHERE slug = $1 FOR UPDATE`, [slug],
+      )
+      const game = rows[0]
+      if (!game) throw new CasinoGameError('Game settings were not found.', 404)
+      const previousConfiguration = sanitizeVaultHeistConfig(parseOutcome(game.configuration).vaultHeist)
+      const previousProfile = previousConfiguration.profiles.find((profile) => profile.id === previousConfiguration.activeProfileId)
+      const nextConfiguration = {
+        ...previousConfiguration,
+        profiles: previousConfiguration.profiles.map((profile) => ({ ...profile, rtpBps: 10_000 - houseEdgeBps })),
+      }
+      assertVaultHeistConfig(nextConfiguration)
+      const { rows: updatedGames } = await client.query<{ configuration: unknown }>(
+        `UPDATE public.games
+         SET configuration = configuration || jsonb_build_object('houseEdgeBps', $3::int, 'vaultHeist', $2::jsonb), updated_at = now()
+         WHERE id = $1::uuid
+         RETURNING configuration`,
+        [game.id, JSON.stringify(nextConfiguration), houseEdgeBps],
+      )
+      if (!updatedGames[0]) throw new CasinoGameError('Game settings could not be confirmed after saving.', 500)
+      const savedConfiguration = parseOutcome(updatedGames[0].configuration)
+      const savedVaultConfiguration = sanitizeVaultHeistConfig(savedConfiguration.vaultHeist)
+      const savedProfile = savedVaultConfiguration.profiles.find((profile) => profile.id === savedVaultConfiguration.activeProfileId)
+      if (!savedProfile || savedProfile.rtpBps !== 10_000 - houseEdgeBps) {
+        throw new CasinoGameError('Saved Vault Heist odds did not match the requested settings.', 500)
+      }
+      await client.query(
+        `INSERT INTO public.audit_logs (actor_user_id, action, entity_type, entity_id, details)
+         VALUES ($1::uuid, 'game.rtp.updated', 'game', $2::text, jsonb_build_object(
+           'game', $3::text, 'previousHouseEdgeBps', $4::int, 'houseEdgeBps', $5::int,
+           'previousRtpBps', $6::int, 'rtpBps', $7::int, 'scope', 'all-vault-profiles'
+         ))`,
+        [actorUserId, game.id, slug, 10_000 - (previousProfile?.rtpBps ?? 9_600), houseEdgeBps, previousProfile?.rtpBps ?? 9_600, 10_000 - houseEdgeBps],
+      )
+      return { slug, name: game.name, houseEdgeBps, rtpBps: 10_000 - houseEdgeBps }
+    })
+  }
+
+  return withTransaction(async (client) => {
+    const { rows } = await client.query<{ id: string; name: string; configuration: unknown }>(
+      `SELECT id::text, name, configuration FROM public.games WHERE slug = $1 FOR UPDATE`, [slug],
+    )
+    const game = rows[0]
+    if (!game) throw new CasinoGameError('Game settings were not found.', 404)
+
+    const previousHouseEdgeBps = readHouseEdge(game.configuration)
+    const previousBonusBuyMultiplier = readDonutBonusBuyMultiplier(game.configuration)
+    const { rows: updatedGames } = await client.query<{ configuration: unknown }>(
+      `UPDATE public.games
+       SET configuration = configuration || jsonb_build_object('houseEdgeBps', $2::int)
+         || CASE WHEN $3::int IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('bonusBuyMultiplier', $3::int) END,
+         updated_at = now()
+       WHERE id = $1::uuid
+       RETURNING configuration`,
+      [game.id, houseEdgeBps, bonusBuyMultiplier ?? null],
+    )
+    if (!updatedGames[0]) throw new CasinoGameError('Game settings could not be confirmed after saving.', 500)
+    const persistedHouseEdgeBps = readHouseEdge(updatedGames[0].configuration)
+    if (persistedHouseEdgeBps !== houseEdgeBps
+      || (bonusBuyMultiplier !== undefined && readDonutBonusBuyMultiplier(updatedGames[0].configuration) !== bonusBuyMultiplier)) {
+      throw new CasinoGameError('Saved game odds did not match the requested settings.', 500)
+    }
+    await client.query(
+      `INSERT INTO public.audit_logs (actor_user_id, action, entity_type, entity_id, details)
+       VALUES ($1::uuid, 'game.rtp.updated', 'game', $2::text, jsonb_build_object(
+         'game', $3::text, 'previousHouseEdgeBps', $4::int, 'houseEdgeBps', $5::int,
+         'previousRtpBps', $6::int, 'rtpBps', $7::int
+       ) || CASE WHEN $8::int IS NULL THEN '{}'::jsonb ELSE jsonb_build_object(
+         'previousBonusBuyMultiplier', $9::int, 'bonusBuyMultiplier', $8::int
+       ) END
+       )`,
+      [
+        actorUserId,
+        game.id,
+        slug,
+        previousHouseEdgeBps,
+        houseEdgeBps,
+        10_000 - previousHouseEdgeBps,
+        10_000 - houseEdgeBps,
+        bonusBuyMultiplier ?? null,
+        previousBonusBuyMultiplier,
+      ],
+    )
+    return {
+      slug,
+      name: game.name,
+      houseEdgeBps,
+      rtpBps: 10_000 - houseEdgeBps,
+      ...(slug === 'donut-division'
+        ? { bonusBuyMultiplier: readDonutBonusBuyMultiplier(updatedGames[0].configuration) }
+        : {}),
+    }
+  })
+}
+
+export async function getRecentGameSettingChanges() {
+  const { rows } = await databasePool.query(
+    `SELECT id::text, action, details, created_at::text AS created_at
+     FROM public.audit_logs
+     WHERE action = 'game.rtp.updated' AND entity_type = 'game'
+     ORDER BY created_at DESC LIMIT 12`,
+  )
+  return rows
+}
+
+function deterministicInteger(serverSeed: string, input: string, max: number) {
+  const range = 0x1_0000_0000
+  const ceiling = range - (range % max)
+  let counter = 0
+  while (true) {
+    const digest = createHmac('sha256', serverSeed).update(`${input}:${counter++}`).digest()
+    const candidate = digest.readUInt32BE(0)
+    if (candidate < ceiling) return candidate % max
+  }
+}
+
+function makeMinePositions(serverSeed: string, clientSeed: string, sessionId: string, mineCount: number) {
+  const positions = Array.from({ length: 25 }, (_, index) => index)
+  for (let index = positions.length - 1; index > 0; index--) {
+    const swapIndex = deterministicInteger(serverSeed, `mines:${clientSeed}:${sessionId}:${index}`, index + 1)
+    ;[positions[index], positions[swapIndex]] = [positions[swapIndex], positions[index]]
+  }
+  return positions.slice(0, mineCount).sort((a, b) => a - b)
+}
+
+function makeTowerColumns(serverSeed: string, clientSeed: string, sessionId: string) {
+  return Array.from({ length: MAX_SAFE_PICKS }, (_, row) =>
+    deterministicInteger(serverSeed, `towers:${clientSeed}:${sessionId}:${row}`, 3),
+  )
+}
+
+function makeCrashPoint(serverSeed: string, clientSeed: string, sessionId: string, rtpBps: number) {
+  const digest = createHmac('sha256', serverSeed).update(`crash:${clientSeed}:${sessionId}`).digest()
+  const unit = digest.readUInt32BE(0) / 0x1_0000_0000
+  const rtp = rtpBps / 10_000
+  return Math.min(CRASH_MAX_MULTIPLIER, Math.max(1, Math.floor((rtp / (1 - unit)) * 100) / 100))
+}
+
+function makeVaultHeistDoorOutcomes(serverSeed: string, clientSeed: string, sessionId: string, profile: VaultHeistProfile) {
+  const outcomes = (Object.keys(profile.weights) as VaultHeistOutcome[])
+    .filter((outcome) => profile.enabled[outcome] && profile.weights[outcome] > 0)
+  const totalWeight = outcomes.reduce((total, outcome) => total + profile.weights[outcome], 0)
+  if (!totalWeight) throw new CasinoGameError('This Vault Heist profile has no weighted outcomes.', 409)
+  return Array.from({ length: 10 }, (_, position) => {
+    const ticket = deterministicInteger(serverSeed, `vault-heist:${clientSeed}:${sessionId}:${position}`, totalWeight)
+    let cumulative = 0
+    for (const outcome of outcomes) {
+      cumulative += profile.weights[outcome]
+      if (ticket < cumulative) return outcome
+    }
+    return outcomes[outcomes.length - 1]
+  })
+}
+
+function isHeistOutcome(value: unknown): value is VaultHeistOutcome {
+  return typeof value === 'string' && ['cash_bundle', 'gold_cache', 'diamond_briefcase', 'security_alert', 'guard_patrol', 'inside_informant', 'master_key', 'golden_vault', 'caught'].includes(value)
+}
+
+function parseOutcome(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new CasinoGameError('Round data is unavailable.', 500)
+  return value as Record<string, unknown>
+}
+
+function numberArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is number => Number.isInteger(item)) : []
+}
+
+function parseDonutGrid(value: unknown): DonutGrid {
+  if (!Array.isArray(value) || value.length !== 5) throw new CasinoGameError('Donut Division round grid is unavailable.', 500)
+  return value.map((column) => {
+    if (!Array.isArray(column) || column.length !== 5) throw new CasinoGameError('Donut Division round grid is unavailable.', 500)
+    return column.map((symbol) => {
+      const knownSymbol = DONUT_SYMBOLS.find((candidate) => candidate === symbol)
+      if (!knownSymbol) throw new CasinoGameError('Donut Division round grid contains an unknown symbol.', 500)
+      return knownSymbol
+    })
+  })
+}
+
+function parseDonutGrids(value: unknown): DonutGrid[] {
+  if (!Array.isArray(value)) throw new CasinoGameError('Donut Division bonus grids are unavailable.', 500)
+  return value.map(parseDonutGrid)
+}
+
+function parseDonutLineWins(value: unknown) {
+  if (!Array.isArray(value)) throw new CasinoGameError('Donut Division line results are unavailable.', 500)
+  return value.map((entry) => {
+    const win = parseOutcome(entry)
+    const symbol = DONUT_SYMBOLS.find((candidate) => candidate === win.symbol)
+    if (!symbol || !Number.isInteger(win.lineIndex) || Number(win.lineIndex) < 0 || Number(win.lineIndex) >= 25
+      || !Number.isInteger(win.count) || Number(win.count) < 3 || Number(win.count) > 5
+      || (win.direction !== undefined && win.direction !== 'left' && win.direction !== 'right')
+      || !Number.isFinite(win.multiplier) || Number(win.multiplier) <= 0) {
+      throw new CasinoGameError('Donut Division line results are invalid.', 500)
+    }
+    return {
+      lineIndex: Number(win.lineIndex),
+      symbol,
+      count: Number(win.count),
+      multiplier: Number(win.multiplier),
+      direction: (win.direction === 'right' ? 'right' : 'left') as 'left' | 'right',
+    }
+  })
+}
+
+function roundView(row: Record<string, any>): GameRoundView {
+  const outcome = parseOutcome(row.outcome)
+  const settled = row.bet_status === 'settled'
+  const slug = row.slug as CasinoGameSlug
+  const picks = numberArray(outcome.picks)
+  const view: GameRoundView = {
+    sessionId: row.session_id,
+    slug,
+    status: settled ? 'settled' : 'active',
+    result: settled ? (outcome.result === 'win' ? 'win' : 'loss') : null,
+    wager: row.wager_amount,
+    payout: row.payout_amount,
+    startedAt: new Date(row.started_at).toISOString(),
+    commitment: row.server_seed_hash,
+    clientSeed: String(outcome.clientSeed),
+    houseEdgeBps: Number(outcome.houseEdgeBps),
+    rtpBps: Number(outcome.rtpBps),
+    picks: numberArray(outcome.picks),
+  }
+
+  if (slug === 'mines') {
+    view.mineCount = Number(outcome.mineCount)
+    if (settled) view.revealedMines = numberArray(outcome.minePositions)
+  }
+  if (slug === 'towers' && settled) view.revealedSafeColumns = numberArray(outcome.safeColumns)
+  if (slug === 'crash' && settled) {
+    view.crashPoint = Number(outcome.crashPoint)
+    if (outcome.cashoutMultiplier !== undefined) view.cashoutMultiplier = Number(outcome.cashoutMultiplier)
+  }
+  if (slug === 'vault-heist') {
+    const snapshot = parseOutcome(outcome.vaultHeistSnapshot)
+    const revealedDoors = Array.isArray(outcome.revealedDoors)
+      ? outcome.revealedDoors.filter((door): door is { position: number; outcome: VaultHeistOutcome; security: number; multiplier: number } =>
+          Boolean(door && typeof door === 'object' && Number.isInteger(door.position) && isHeistOutcome(door.outcome) && Number.isInteger(door.security) && Number.isFinite(door.multiplier)))
+      : []
+    const rtpBps = Number(outcome.rtpBps)
+    view.vaultHeist = {
+      profileId: String(snapshot.id),
+      profileName: String(snapshot.name),
+      security: Number(outcome.security ?? 0),
+      securityMax: Number(snapshot.securityMax),
+      currentMultiplier: picks.length ? payoutMultiplierForRtp(Number(outcome.currentMultiplier ?? 1), rtpBps) : 1,
+      maxMultiplier: payoutMultiplierForRtp(Number(snapshot.maxMultiplier), rtpBps),
+      masterKeyPending: outcome.masterKeyPending === true,
+      revealedDoors: revealedDoors.map((door) => ({ ...door, multiplier: payoutMultiplierForRtp(door.multiplier, rtpBps) })),
+      ...(settled && Array.isArray(outcome.doorOutcomes) ? { allDoorOutcomes: outcome.doorOutcomes.filter(isHeistOutcome) } : {}),
+    }
+  }
+  if (slug === 'donut-division') {
+    const donut = parseOutcome(outcome.donutDivision)
+    const bonusStage = donut.bonusStage === 'choose' || donut.bonusStage === 'pick' ? donut.bonusStage : null
+    const bonusChoice = DONUT_BONUS_CHOICES.find((choice) => choice === donut.bonusChoice) ?? null
+    const feature = donut.feature === 'gooey' || donut.feature === 'maxWin' ? donut.feature : null
+    const bonusSpinWins = Array.isArray(donut.bonusSpinWins)
+      ? donut.bonusSpinWins.map((entry) => {
+          const spin = parseOutcome(entry)
+          if (!Number.isFinite(spin.rawMultiplier) || Number(spin.rawMultiplier) < 0) {
+            throw new CasinoGameError('Donut Division bonus results are invalid.', 500)
+          }
+          return { lineWins: parseDonutLineWins(spin.lineWins), rawMultiplier: Number(spin.rawMultiplier) }
+        })
+      : []
+    const revealedCards = Array.isArray(donut.revealedCards)
+      ? donut.revealedCards.map((entry) => {
+          const card = parseOutcome(entry)
+          if (!Number.isInteger(card.position) || Number(card.position) < 0 || Number(card.position) >= 12
+            || !Number.isInteger(card.value) || Number(card.value) < 1) {
+            throw new CasinoGameError('Donut Division bonus card data is invalid.', 500)
+          }
+          return { position: Number(card.position), value: Number(card.value) }
+        })
+      : []
+    if (!Number.isInteger(donut.picksRemaining) || Number(donut.picksRemaining) < 0 || Number(donut.picksRemaining) > 3) {
+      throw new CasinoGameError('Donut Division bonus state is invalid.', 500)
+    }
+    view.donutDivision = {
+      grid: parseDonutGrid(donut.grid),
+      lineWins: parseDonutLineWins(donut.lineWins),
+      scatterCount: Number(donut.scatterCount),
+      bonusStage,
+      bonusChoice,
+      bonusGrids: parseDonutGrids(donut.bonusGrids),
+      bonusMultipliers: numberArray(donut.bonusMultipliers),
+      bonusSpinWins,
+      revealedCards,
+      picksRemaining: Number(donut.picksRemaining),
+      feature,
+    }
+  }
+  if (settled) {
+    view.fairness = {
+      serverSeed: String(outcome.serverSeed),
+      clientSeed: String(outcome.clientSeed),
+      commitment: row.server_seed_hash,
+    }
+  }
+  if (slug === 'fizz-rush') {
+    view.fizzRush = {
+      commitment: row.server_seed_hash,
+      rtpBps: Number(outcome.rtpBps),
+      houseEdgeBps: Number(outcome.houseEdgeBps),
+      maxCheckpoints: Number(outcome.maxCheckpoints ?? 300),
+      settled,
+      difficulty: 'hard',
+      mode: 'real',
+      wagerCents: Number(outcome.wagerCents),
+      betCents: Number(outcome.wagerCents),
+      ...(settled
+        ? {
+            lethalCheckpoint: outcome.lethalCheckpoint === null ? null : Number(outcome.lethalCheckpoint),
+            serverSeed: String(outcome.serverSeed),
+          }
+        : {}),
+    }
+  }
+  return view
+}
+
+async function loadRound(client: PoolClient, userId: string, slug: CasinoGameSlug, sessionId: string, lock = true) {
+  const { rows } = await client.query(
+    `SELECT gs.id::text AS session_id, gs.started_at, gs.status AS session_status,
+            b.id::text AS bet_id, b.wager_amount::text, b.payout_amount::text, b.status AS bet_status,
+            gr.outcome, gr.server_seed_hash, g.slug
+     FROM public.game_sessions gs
+     JOIN public.bets b ON b.game_session_id = gs.id AND b.user_id = gs.user_id
+     JOIN public.game_results gr ON gr.bet_id = b.id
+     JOIN public.games g ON g.id = gs.game_id
+     WHERE gs.id = $1::uuid AND gs.user_id = $2::uuid AND g.slug = $3
+     ${lock ? 'FOR UPDATE OF gs, b, gr' : ''}`,
+    [sessionId, userId, slug],
+  )
+  if (!rows[0]) throw new CasinoGameError('Round not found.', 404)
+  return rows[0]
+}
+
+async function enforceResponsibleGaming(client: PoolClient, userId: string, wagerAmount: number) {
+  const { rows: limits } = await client.query<{ limit_type: string; limit_amount: string | null; period: string | null; starts_at: Date }>(
+    `SELECT limit_type, limit_amount::text, period, starts_at
+     FROM public.responsible_gaming_limits
+     WHERE user_id = $1::uuid AND starts_at <= now() AND (ends_at IS NULL OR ends_at > now())`, [userId],
+  )
+  if (limits.some((limit) => ['cooling_off', 'self_exclusion', 'suspension'].includes(limit.limit_type))) {
+    throw new CasinoGameError('Play is unavailable while an account restriction is active.', 403)
+  }
+
+  for (const limit of limits) {
+    if (limit.limit_type === 'session_time' && limit.limit_amount !== null) {
+      const { rows } = await client.query<{ exceeded: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM public.game_sessions
+           WHERE user_id = $1::uuid AND status = 'active'
+             AND started_at <= now() - ($2::numeric * interval '1 minute')
+         ) AS exceeded`, [userId, limit.limit_amount],
+      )
+      if (rows[0]?.exceeded) throw new CasinoGameError('Your session time limit has been reached.', 403)
+    }
+
+    if (limit.limit_type === 'loss' && limit.limit_amount !== null) {
+      const intervalDays = limit.period === 'day' ? 1 : limit.period === 'week' ? 7 : limit.period === 'month' ? 30 : null
+      const cutoff = intervalDays === null
+        ? limit.starts_at
+        : new Date(Date.now() - intervalDays * 24 * 60 * 60 * 1000)
+      const { rows } = await client.query<{ net_loss: string }>(
+        `SELECT greatest(COALESCE(sum(wager_amount - payout_amount), 0), 0)::text AS net_loss
+         FROM public.bets WHERE user_id = $1::uuid AND status = 'settled' AND created_at >= $2`,
+        [userId, cutoff],
+      )
+      const currentLoss = Number(rows[0]?.net_loss ?? 0)
+      if (currentLoss + wagerAmount > Number(limit.limit_amount)) {
+        throw new CasinoGameError('This wager would exceed your active loss limit.', 403)
+      }
+    }
+  }
+}
+
+async function getLockedWallet(client: PoolClient, userId: string) {
+  const { rows } = await client.query<{ id: string; balance: string }>(
+    `SELECT id::text, balance::text FROM public.wallets WHERE user_id = $1::uuid FOR UPDATE`, [userId],
+  )
+  if (!rows[0]) throw new CasinoGameError('Set up your wallet before playing.', 409)
+  return rows[0]
+}
+
+async function insertWalletLedger(
+  client: PoolClient,
+  input: { userId: string; walletId: string; amount: string; type: 'bet' | 'payout'; betId: string; idempotencyKey: string; description: string },
+) {
+  const { rows } = await client.query(
+    `INSERT INTO public.wallet_transactions
+       (wallet_id, user_id, type, amount, balance_before, balance_after, reference_type, reference_id, idempotency_key, description)
+     SELECT w.id, $1::uuid, $3, $4::numeric, w.balance, w.balance + $4::numeric,
+            'bet', $5::uuid, $6, $7
+     FROM public.wallets w WHERE w.id = $2::uuid
+     RETURNING id::text`,
+    [input.userId, input.walletId, input.type, input.amount, input.betId, input.idempotencyKey, input.description],
+  )
+  if (!rows[0]) throw new CasinoGameError('The wallet ledger could not be updated.', 500)
+}
+
+function requestLedgerKey(userId: string, requestId: string) {
+  return `game:${userId}:${requestId}`
+}
+
+export async function startCasinoRound(input: {
+  userId: string
+  slug: CasinoGameSlug
+  wagerCents: number
+  mineCount: number
+  requestId: string
+  expectedRtpBps: number
+  profileId?: string
+  buyBonus?: boolean
+}): Promise<GameRoundView> {
+  if (!isGameSlug(input.slug)) throw new CasinoGameError('Unknown game.', 404)
+  if (input.buyBonus && input.slug !== 'donut-division') {
+    throw new CasinoGameError('Bonus purchases are only available for Donut Division.')
+  }
+  if (!Number.isInteger(input.wagerCents) || input.wagerCents < 100 || input.wagerCents > MAX_WAGER_CENTS) {
+    throw new CasinoGameError('Wager must be between $1.00 and $100.00.')
+  }
+  if (input.slug === 'mines' && (!Number.isInteger(input.mineCount) || input.mineCount < 1 || input.mineCount > 24)) {
+    throw new CasinoGameError('Choose between 1 and 24 mines.')
+  }
+
+  await ensureBuiltInGames()
+  if (input.slug === 'donut-division') getDonutRtpModel()
+  return withTransaction(async (client) => {
+    const wallet = await getLockedWallet(client, input.userId)
+    const idempotencyKey = requestLedgerKey(input.userId, input.requestId)
+    const { rows: existing } = await client.query<{ session_id: string }>(
+      `SELECT gs.id::text AS session_id FROM public.wallet_transactions wt
+       JOIN public.bets b ON b.id = wt.reference_id
+       JOIN public.game_sessions gs ON gs.id = b.game_session_id
+       JOIN public.games g ON g.id = gs.game_id
+       WHERE wt.user_id = $1::uuid AND wt.idempotency_key = $2 AND g.slug = $3 LIMIT 1`,
+      [input.userId, idempotencyKey, input.slug],
+    )
+    if (existing[0]) return roundView(await loadRound(client, input.userId, input.slug, existing[0].session_id))
+
+    const { rows: active } = await client.query(
+      `SELECT gs.id FROM public.game_sessions gs
+       JOIN public.games g ON g.id = gs.game_id
+       JOIN public.bets b ON b.game_session_id = gs.id
+       WHERE gs.user_id = $1::uuid AND gs.status = 'active' AND g.slug = $2 AND b.status = 'pending'
+       LIMIT 1`, [input.userId, input.slug],
+    )
+    if (active[0]) throw new CasinoGameError('Finish your current round before starting another.', 409)
+
+    const { rows: games } = await client.query<{ id: string; configuration: unknown }>(
+      `SELECT id::text, configuration FROM public.games WHERE slug = $1 AND status = 'available' FOR SHARE`, [input.slug],
+    )
+    if (!games[0]) throw new CasinoGameError('This game is temporarily unavailable.', 404)
+
+    const bonusBuyMultiplier = input.buyBonus
+      ? readDonutBonusBuyMultiplier(games[0].configuration)
+      : 1
+    const wagerCents = input.wagerCents * bonusBuyMultiplier
+    if (!Number.isSafeInteger(wagerCents) || wagerCents > MAX_WAGER_CENTS) {
+      throw new CasinoGameError('This bonus purchase exceeds the $100 maximum wager. Lower your bet or ask an administrator to adjust the bonus price.')
+    }
+    const wagerAmount = (wagerCents / 100).toFixed(2)
+    if (Number(wallet.balance) < Number(wagerAmount)) throw new CasinoGameError('Your wallet balance is too low.', 409)
+    await enforceResponsibleGaming(client, input.userId, Number(wagerAmount))
+
+    const vaultHeistConfig = input.slug === 'vault-heist'
+      ? sanitizeVaultHeistConfig(parseOutcome(games[0].configuration).vaultHeist)
+      : null
+    const vaultHeistProfile = vaultHeistConfig
+      ? vaultHeistConfig.profiles.find((profile) => profile.id === (input.profileId ?? vaultHeistConfig.activeProfileId))
+      : null
+    if (input.slug === 'vault-heist' && !vaultHeistProfile) throw new CasinoGameError('Choose an available Vault Heist profile.', 409)
+    const houseEdgeBps = vaultHeistProfile ? 10_000 - vaultHeistProfile.rtpBps : readHouseEdge(games[0].configuration)
+    const rtpBps = 10_000 - houseEdgeBps
+    if (input.expectedRtpBps !== rtpBps) {
+      throw new CasinoGameError(`Published RTP changed to ${(rtpBps / 100).toFixed(1)}% (house edge ${(houseEdgeBps / 100).toFixed(1)}%). Refresh this page to review the new settings before starting.`, 409)
+    }
+    const serverSeed = randomBytes(32).toString('hex')
+    const commitment = createHash('sha256').update(serverSeed).digest('hex')
+    const clientSeed = input.requestId
+    const { rows: sessions } = await client.query<{ id: string; started_at: Date }>(
+      `INSERT INTO public.game_sessions (user_id, game_id, status) VALUES ($1::uuid, $2::uuid, 'active')
+       RETURNING id::text, started_at`, [input.userId, games[0].id],
+    )
+    const session = sessions[0]
+    const { rows: bets } = await client.query<{ id: string }>(
+      `INSERT INTO public.bets (user_id, wallet_id, game_session_id, game_id, wager_amount, status)
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::numeric, 'pending') RETURNING id::text`,
+      [input.userId, wallet.id, session.id, games[0].id, wagerAmount],
+    )
+    const betId = bets[0].id
+    const outcome: Record<string, unknown> = {
+      game: input.slug,
+      result: null,
+      requestId: input.requestId,
+      serverSeed,
+      clientSeed,
+      houseEdgeBps,
+      rtpBps,
+      picks: [],
+      wagerCents,
+      ...(input.buyBonus
+        ? {
+            buyBonus: true,
+            baseWagerCents: input.wagerCents,
+            bonusBuyMultiplier,
+          }
+        : {}),
+    }
+    if (input.slug === 'mines') {
+      outcome.mineCount = input.mineCount
+      outcome.minePositions = makeMinePositions(serverSeed, clientSeed, session.id, input.mineCount)
+    }
+    if (input.slug === 'towers') outcome.safeColumns = makeTowerColumns(serverSeed, clientSeed, session.id)
+    if (input.slug === 'crash') outcome.crashPoint = makeCrashPoint(serverSeed, clientSeed, session.id, rtpBps)
+    if (input.slug === 'vault-heist' && vaultHeistProfile) {
+      outcome.vaultHeistSnapshot = vaultHeistProfile
+      outcome.security = 0
+      outcome.currentMultiplier = 1
+      outcome.masterKeyPending = false
+      outcome.revealedDoors = []
+      outcome.doorOutcomes = makeVaultHeistDoorOutcomes(serverSeed, clientSeed, session.id, vaultHeistProfile)
+    }
+    if (input.slug === 'donut-division') {
+      const spin = input.buyBonus
+        ? generateDonutBonusPurchaseSpin({ rtpBps, serverSeed, clientSeed, sessionId: session.id })
+        : generateInitialDonutSpin({ wagerCents, rtpBps, serverSeed, clientSeed, sessionId: session.id })
+      outcome.donutDivision = {
+        ...spin,
+        baseMultiplier: spin.rawMultiplier,
+        bonusChoice: null,
+        bonusSpinWins: spin.bonusGrids.map((grid) => ({
+          lineWins: evaluateDonutGrid(grid).lineWins,
+          rawMultiplier: evaluateDonutGrid(grid).rawMultiplier,
+        })),
+        cards: [],
+        picks: [],
+        picksRemaining: 3,
+      }
+      outcome.result = spin.result
+      if (spin.payoutCents !== null) outcome.payoutAmount = (spin.payoutCents / 100).toFixed(2)
+    }
+    if (input.slug === 'fizz-rush') {
+      // Pre-commit the lethal checkpoint using the existing deterministicInteger function.
+      // lethalSlot == maxCheckpoints means "no lethal event this run".
+      const maxCheckpoints = 300 // 300 × 50 m = 15,000 m max
+      const lethalSlot = deterministicInteger(
+        serverSeed,
+        `fizz-rush:${clientSeed}:${session.id}:0`,
+        maxCheckpoints + 1,
+      )
+      outcome.maxCheckpoints = maxCheckpoints
+      outcome.lethalCheckpoint = lethalSlot < maxCheckpoints ? lethalSlot : null
+    }
+
+    await client.query(
+      `INSERT INTO public.game_results (bet_id, outcome, payout_amount, server_seed_hash)
+       VALUES ($1::uuid, $2::jsonb, 0, $3)`, [betId, JSON.stringify(outcome), commitment],
+    )
+    await insertWalletLedger(client, {
+      userId: input.userId,
+      walletId: wallet.id,
+      amount: `-${wagerAmount}`,
+      type: 'bet',
+      betId,
+      idempotencyKey,
+      description: input.buyBonus
+        ? 'Donut Division bonus purchase'
+        : `${input.slug[0].toUpperCase()}${input.slug.slice(1)} wager`,
+    })
+    await client.query(
+      `INSERT INTO public.player_progression (user_id, total_xp)
+       VALUES ($1::uuid, $2::bigint)
+       ON CONFLICT (user_id) DO UPDATE SET
+         total_xp = public.player_progression.total_xp + EXCLUDED.total_xp,
+         updated_at = now()`,
+      [input.userId, xpForFizzcoinWager(wagerCents)],
+    )
+
+    if (input.slug === 'crash' && Number(outcome.crashPoint) <= 1) {
+      await settleRound(client, { bet_id: betId, session_id: session.id }, input.userId, outcome, '0.00', 'loss')
+    }
+    if (input.slug === 'donut-division' && outcome.payoutAmount !== undefined) {
+      await settleRound(
+        client,
+        { bet_id: betId, session_id: session.id, slug: input.slug },
+        input.userId,
+        outcome,
+        String(outcome.payoutAmount),
+        Number(outcome.payoutAmount) > 0 ? 'win' : 'loss',
+      )
+    }
+
+    return roundView({
+      session_id: session.id,
+      slug: input.slug,
+      started_at: session.started_at,
+      wager_amount: wagerAmount,
+      payout_amount: String(outcome.payoutAmount ?? '0.00'),
+      bet_status: outcome.result ? 'settled' : 'pending',
+      session_status: outcome.result ? 'completed' : 'active',
+      outcome,
+      server_seed_hash: commitment,
+    })
+  })
+}
+
+async function settleRound(
+  client: PoolClient,
+  row: Record<string, any>,
+  userId: string,
+  outcome: Record<string, unknown>,
+  payoutAmount: string,
+  result: 'win' | 'loss',
+) {
+  const { rows: wallets } = await client.query<{ id: string }>(
+    `SELECT id::text FROM public.wallets WHERE user_id = $1::uuid FOR UPDATE`, [userId],
+  )
+  const wallet = wallets[0]
+  if (!wallet) throw new CasinoGameError('Wallet record could not be loaded.', 500)
+  outcome.result = result
+  outcome.payoutAmount = payoutAmount
+  await client.query(
+    `UPDATE public.bets SET status = 'settled', payout_amount = $2::numeric, settled_at = now() WHERE id = $1::uuid`,
+    [row.bet_id, payoutAmount],
+  )
+  await client.query(
+    `UPDATE public.game_results SET outcome = $2::jsonb, payout_amount = $3::numeric WHERE bet_id = $1::uuid`,
+    [row.bet_id, JSON.stringify(outcome), payoutAmount],
+  )
+  await client.query(`UPDATE public.game_sessions SET status = 'completed', ended_at = now() WHERE id = $1::uuid`, [row.session_id])
+  if (Number(payoutAmount) > 0) {
+    await insertWalletLedger(client, {
+      userId,
+      walletId: wallet.id,
+      amount: payoutAmount,
+      type: 'payout',
+      betId: row.bet_id,
+      idempotencyKey: `game:payout:${row.bet_id}`,
+      description: `${row.slug[0].toUpperCase()}${row.slug.slice(1)} payout`,
+    })
+  }
+}
+
+function isDonutBonusChoice(value: string | undefined): value is DonutBonusChoice {
+  return DONUT_BONUS_CHOICES.some((choice) => choice === value)
+}
+
+async function playDonutDivisionAction(
+  client: PoolClient,
+  row: Record<string, any>,
+  input: { userId: string; sessionId: string; action: 'pick' | 'bonus'; position?: number; choiceId?: string; requestId?: string },
+) {
+  const outcome = parseOutcome(row.outcome)
+  const donut = parseOutcome(outcome.donutDivision)
+  if (input.requestId && outcome.lastActionRequestId === input.requestId) return roundView(row)
+  if (row.bet_status !== 'pending' || row.session_status !== 'active') throw new CasinoGameError('This round is already finished.', 409)
+  const serverSeed = String(outcome.serverSeed)
+  const clientSeed = String(outcome.clientSeed)
+  const rtpBps = Number(outcome.rtpBps)
+  const wagerCents = Number(outcome.wagerCents)
+  const baseMultiplier = Number(donut.baseMultiplier)
+  const bonusPurchase = outcome.buyBonus === true
+
+  if (input.action === 'bonus') {
+    if (donut.bonusStage !== 'choose') throw new CasinoGameError('This round is not waiting for a bonus choice.', 409)
+    if (!isDonutBonusChoice(input.choiceId)) throw new CasinoGameError('Choose a valid Donut Division bonus.')
+    const choice = input.choiceId
+    const resolution = generateDonutBonus(choice, serverSeed, clientSeed, input.sessionId)
+    donut.bonusChoice = choice
+    donut.bonusStage = choice === 'pick' ? 'pick' : null
+    donut.bonusGrids = resolution.grids
+    donut.bonusMultipliers = resolution.multipliers
+    donut.bonusSpinWins = resolution.grids.map((grid, index) => {
+      const evaluation = evaluateDonutGrid(grid)
+      return { lineWins: evaluation.lineWins, rawMultiplier: evaluation.rawMultiplier * (resolution.multipliers[index] ?? 1) }
+    })
+    donut.cards = resolution.cards
+    donut.revealedCards = []
+    donut.picksRemaining = choice === 'pick' ? 3 : 0
+    outcome.donutDivision = donut
+    if (choice === 'pick') {
+      outcome.lastActionRequestId = input.requestId
+      await client.query(`UPDATE public.game_results SET outcome = $2::jsonb WHERE bet_id = $1::uuid`, [row.bet_id, JSON.stringify(outcome)])
+      return roundView({ ...row, outcome })
+    }
+
+    const payoutCents = finalizeDonutBonusPayout({
+      wagerCents,
+      rtpBps,
+      baseMultiplier,
+      bonusMultiplier: resolution.rawMultiplier,
+      choice,
+      bonusPurchase,
+      serverSeed,
+      clientSeed,
+      sessionId: input.sessionId,
+    })
+    outcome.lastActionRequestId = input.requestId
+    outcome.payoutAmount = (payoutCents / 100).toFixed(2)
+    await settleRound(
+      client,
+      row,
+      input.userId,
+      outcome,
+      String(outcome.payoutAmount),
+      payoutCents > 0 ? 'win' : 'loss',
+    )
+    return roundView({
+      ...row,
+      outcome,
+      payout_amount: String(outcome.payoutAmount),
+      bet_status: 'settled',
+      session_status: 'completed',
+    })
+  }
+
+  if (donut.bonusStage !== 'pick' || donut.bonusChoice !== 'pick') {
+    throw new CasinoGameError('This round is not waiting for a bonus card pick.', 409)
+  }
+  if (!Number.isInteger(input.position) || input.position! < 0 || input.position! >= 12) {
+    throw new CasinoGameError('Choose one of the twelve case files.')
+  }
+  const cards = numberArray(donut.cards)
+  const picks = numberArray(outcome.picks)
+  if (cards.length !== 12 || picks.includes(input.position!)) {
+    throw new CasinoGameError('That case file has already been opened or is unavailable.', 409)
+  }
+  picks.push(input.position!)
+  outcome.picks = picks
+  const revealedCards = revealDonutCards(cards, picks)
+  donut.revealedCards = revealedCards
+  donut.picksRemaining = Math.max(0, 3 - picks.length)
+  outcome.donutDivision = donut
+  outcome.lastActionRequestId = input.requestId
+
+  if (picks.length < 3) {
+    await client.query(`UPDATE public.game_results SET outcome = $2::jsonb WHERE bet_id = $1::uuid`, [row.bet_id, JSON.stringify(outcome)])
+    return roundView({ ...row, outcome })
+  }
+
+  const bonusMultiplier = revealedCards.reduce((sum, card) => sum + card.value, 0)
+  const payoutCents = finalizeDonutBonusPayout({
+    wagerCents,
+    rtpBps,
+    baseMultiplier,
+    bonusMultiplier,
+    choice: 'pick',
+    serverSeed,
+    clientSeed,
+    sessionId: input.sessionId,
+  })
+  outcome.payoutAmount = (payoutCents / 100).toFixed(2)
+  await settleRound(
+    client,
+    row,
+    input.userId,
+    outcome,
+    String(outcome.payoutAmount),
+    payoutCents > 0 ? 'win' : 'loss',
+  )
+  return roundView({
+    ...row,
+    outcome,
+    payout_amount: String(outcome.payoutAmount),
+    bet_status: 'settled',
+    session_status: 'completed',
+  })
+}
+
+function multiplierForSafePicks(slug: CasinoGameSlug, picks: number, mineCount: number, rtpBps: number) {
+  if (slug !== 'towers' && slug !== 'mines') throw new CasinoGameError('Safe-pick payout requested for an unsupported game.', 500)
+  return payoutMultiplierForSafePicks(slug, picks, mineCount, rtpBps)
+}
+
+export async function playCasinoAction(input: {
+  userId: string
+  slug: CasinoGameSlug
+  sessionId: string
+  action: 'pick' | 'cashout' | 'sync' | 'bonus'
+  position?: number
+  choiceId?: string
+  requestId?: string
+}): Promise<GameRoundView> {
+  return withTransaction(async (client) => {
+    const row = await loadRound(client, input.userId, input.slug, input.sessionId)
+    if (input.slug === 'fizz-rush') {
+      if (input.action !== 'cashout') throw new CasinoGameError('Fizz Rush only accepts the settle (cashout) action.')
+      if (row.bet_status !== 'pending' || row.session_status !== 'active') throw new CasinoGameError('This round is already finished.', 409)
+      const outcome = parseOutcome(row.outcome)
+      const rawMultiplier = typeof input.position === 'number' && Number.isFinite(input.position) ? input.position : 0
+      const rtpBps = Number(outcome.rtpBps)
+      // RTP is enforced directly: scaledMultiplier = rawMultiplier × (rtpBps / 10_000)
+      const scaledMultiplier = Math.max(0, rawMultiplier * (rtpBps / 10_000))
+      const payoutCents = Math.floor(Number(row.wager_amount) * scaledMultiplier * 100 + 1e-8)
+      const payoutAmount = (payoutCents / 100).toFixed(2)
+      outcome.rawMultiplier = rawMultiplier
+      outcome.scaledMultiplier = scaledMultiplier
+      await settleRound(client, row, input.userId, outcome, payoutAmount, payoutCents > 0 ? 'win' : 'loss')
+      return roundView({
+        ...row,
+        bet_status: 'settled',
+        session_status: 'completed',
+        payout_amount: payoutAmount,
+        outcome,
+      })
+    }
+    if (input.slug === 'donut-division') {
+      if (input.action === 'pick' || input.action === 'bonus') {
+        return playDonutDivisionAction(client, row, {
+          userId: input.userId,
+          sessionId: input.sessionId,
+          action: input.action,
+          position: input.position,
+          choiceId: input.choiceId,
+          requestId: input.requestId,
+        })
+      }
+      throw new CasinoGameError('Donut Division only accepts bonus choices and case-file picks.')
+    }
+    if (row.bet_status !== 'pending' || row.session_status !== 'active') throw new CasinoGameError('This round is already finished.', 409)
+    if (input.action === 'sync' && input.slug !== 'crash') throw new CasinoGameError('Round sync is only available for Crash.')
+    const outcome = parseOutcome(row.outcome)
+    const picks = numberArray(outcome.picks)
+
+    if (input.action === 'pick') {
+      if (input.slug === 'crash') throw new CasinoGameError('Crash rounds use the cash-out action.')
+      if (!Number.isInteger(input.position)) throw new CasinoGameError('Choose a valid game position.')
+      if (input.slug === 'vault-heist') {
+        const position = input.position!
+        if (position < 0 || position > 9) throw new CasinoGameError('Choose one of the ten vault doors.')
+        if (picks.includes(position)) throw new CasinoGameError('That vault door has already been opened.')
+        if (picks.length >= 10) throw new CasinoGameError('There are no more doors in this round.', 409)
+        const doorOutcomes = Array.isArray(outcome.doorOutcomes) ? outcome.doorOutcomes.filter(isHeistOutcome) : []
+        const vaultSnapshot = parseOutcome(outcome.vaultHeistSnapshot)
+        if (doorOutcomes.length !== 10) throw new CasinoGameError('The committed door sequence is unavailable.', 500)
+        const vaultOutcome = doorOutcomes[position]
+        const previousSecurity = Number(outcome.security ?? 0)
+        const maximumSecurity = Number(vaultSnapshot.securityMax)
+        const previousMultiplier = Number(outcome.currentMultiplier ?? 1)
+        const keyWasPending = outcome.masterKeyPending === true
+        let security = previousSecurity
+        let multiplier = previousMultiplier
+
+        picks.push(position)
+        outcome.picks = picks
+        if (vaultOutcome === 'caught') {
+          security = maximumSecurity
+        } else {
+          multiplier = payoutMultiplierForVaultPick(previousMultiplier, vaultOutcome, Number(vaultSnapshot.maxMultiplier))
+          if (vaultOutcome === 'inside_informant') security = Math.max(0, previousSecurity - 1)
+          else if (!keyWasPending) {
+            if (vaultOutcome === 'guard_patrol') security = previousSecurity + 2
+            else security = previousSecurity + 1
+          }
+          outcome.masterKeyPending = vaultOutcome === 'master_key'
+          if (keyWasPending && vaultOutcome === 'master_key') outcome.masterKeyPending = true
+        }
+
+        outcome.security = security
+        outcome.currentMultiplier = multiplier
+        const revealedDoors = Array.isArray(outcome.revealedDoors) ? outcome.revealedDoors : []
+        revealedDoors.push({ position, outcome: vaultOutcome, security, multiplier })
+        outcome.revealedDoors = revealedDoors
+        const captured = vaultOutcome === 'caught' || security >= maximumSecurity
+        if (captured) {
+          outcome.captureReason = vaultOutcome === 'caught' ? 'caught' : 'security'
+          await settleRound(client, row, input.userId, outcome, '0.00', 'loss')
+        } else if (picks.length === 10) {
+          const payoutMultiplier = payoutMultiplierForRtp(multiplier, Number(outcome.rtpBps))
+          const payoutCents = Math.floor(Number(row.wager_amount) * payoutMultiplier * 100 + 1e-8)
+          const payoutAmount = (payoutCents / 100).toFixed(2)
+          outcome.cashoutMultiplier = payoutMultiplier
+          await settleRound(client, row, input.userId, outcome, payoutAmount, 'win')
+        } else {
+          await client.query(`UPDATE public.game_results SET outcome = $2::jsonb WHERE bet_id = $1::uuid`, [row.bet_id, JSON.stringify(outcome)])
+        }
+
+        return roundView({
+          ...row,
+          bet_status: outcome.result ? 'settled' : 'pending',
+          session_status: outcome.result ? 'completed' : 'active',
+          payout_amount: String(outcome.payoutAmount ?? '0.00'),
+          outcome,
+        })
+      }
+      if (input.slug === 'towers' && (input.position! < 0 || input.position! > 2)) throw new CasinoGameError('Choose one of the three columns.')
+      if (input.slug === 'mines' && (input.position! < 0 || input.position! > 24)) throw new CasinoGameError('Choose a tile on the board.')
+      if (input.slug === 'mines' && picks.includes(input.position!)) throw new CasinoGameError('You already chose that tile.')
+      const maxPicks = input.slug === 'towers' ? MAX_SAFE_PICKS : Math.min(MAX_SAFE_PICKS, 25 - Number(outcome.mineCount))
+      if (picks.length >= maxPicks) throw new CasinoGameError('There are no more picks in this round.', 409)
+      const isSafe = input.slug === 'towers'
+        ? input.position === numberArray(outcome.safeColumns)[picks.length]
+        : !numberArray(outcome.minePositions).includes(input.position!)
+      picks.push(input.position!)
+      outcome.picks = picks
+
+      if (!isSafe) {
+        if (input.slug === 'mines') outcome.revealedMine = input.position
+        await settleRound(client, row, input.userId, outcome, '0.00', 'loss')
+      } else {
+        const multiplier = multiplierForSafePicks(input.slug, picks.length, Number(outcome.mineCount ?? 0), Number(outcome.rtpBps))
+        const rawPayoutCents = Math.floor((input.slug === 'mines' ? Number(row.wager_amount) : Number(row.wager_amount)) * multiplier * 100 + 1e-8)
+        const payoutAmount = (rawPayoutCents / 100).toFixed(2)
+        outcome.currentMultiplier = multiplier
+        outcome.currentPayout = payoutAmount
+        if (picks.length >= maxPicks) {
+          outcome.cashoutMultiplier = multiplier
+          await settleRound(client, row, input.userId, outcome, payoutAmount, 'win')
+        } else {
+          await client.query(`UPDATE public.game_results SET outcome = $2::jsonb WHERE bet_id = $1::uuid`, [row.bet_id, JSON.stringify(outcome)])
+        }
+      }
+    } else {
+      if (input.slug === 'crash') {
+        const { rows } = await client.query<{ elapsed: number }>(
+          `SELECT greatest(extract(epoch FROM now() - $1::timestamptz), 0)::float8 AS elapsed`, [row.started_at],
+        )
+        const currentMultiplier = crashMultiplierAtElapsed(Number(rows[0].elapsed))
+        const crashPoint = Number(outcome.crashPoint)
+        if (currentMultiplier >= crashPoint) {
+          outcome.crashedAt = crashPoint
+          await settleRound(client, row, input.userId, outcome, '0.00', 'loss')
+        } else if (input.action === 'sync') {
+          return roundView(row)
+        } else {
+          outcome.cashoutMultiplier = currentMultiplier
+          const payoutCents = Math.floor(Number(row.wager_amount) * currentMultiplier * 100 + 1e-8)
+          await settleRound(client, row, input.userId, outcome, (payoutCents / 100).toFixed(2), 'win')
+        }
+      } else if (input.slug === 'vault-heist') {
+        if (!picks.length) throw new CasinoGameError('Open at least one vault door before making your escape.')
+        const baseMultiplier = Number(outcome.currentMultiplier ?? 1)
+        const payoutMultiplier = payoutMultiplierForRtp(baseMultiplier, Number(outcome.rtpBps))
+        const payoutCents = Math.floor(Number(row.wager_amount) * payoutMultiplier * 100 + 1e-8)
+        const payoutAmount = (payoutCents / 100).toFixed(2)
+        outcome.cashoutMultiplier = payoutMultiplier
+        await settleRound(client, row, input.userId, outcome, payoutAmount, 'win')
+      } else {
+        if (!picks.length) throw new CasinoGameError('Reveal at least one safe tile before cashing out.')
+        const multiplier = multiplierForSafePicks(input.slug, picks.length, Number(outcome.mineCount ?? 0), Number(outcome.rtpBps))
+        outcome.cashoutMultiplier = multiplier
+        const payoutCents = Math.floor(Number(row.wager_amount) * multiplier * 100 + 1e-8)
+        await settleRound(client, row, input.userId, outcome, (payoutCents / 100).toFixed(2), 'win')
+      }
+    }
+
+    const updated = {
+      ...row,
+      bet_status: outcome.result ? 'settled' : 'pending',
+      payout_amount: String(outcome.payoutAmount ?? '0.00'),
+      outcome,
+      session_status: outcome.result ? 'completed' : 'active',
+    }
+    return roundView(updated)
+  })
+}
+
+export async function getActiveCasinoRound(userId: string, slug: CasinoGameSlug): Promise<GameRoundView | null> {
+  const { rows } = await databasePool.query(
+    `SELECT gs.id::text AS session_id, gs.started_at, gs.status AS session_status,
+            b.id::text AS bet_id, b.wager_amount::text, b.payout_amount::text, b.status AS bet_status,
+            gr.outcome, gr.server_seed_hash, g.slug
+     FROM public.game_sessions gs
+     JOIN public.bets b ON b.game_session_id = gs.id AND b.user_id = gs.user_id
+     JOIN public.game_results gr ON gr.bet_id = b.id
+     JOIN public.games g ON g.id = gs.game_id
+     WHERE gs.user_id = $1::uuid AND g.slug = $2 AND gs.status = 'active' AND b.status = 'pending'
+     ORDER BY gs.started_at DESC LIMIT 1`,
+    [userId, slug],
+  )
+  return rows[0] ? roundView(rows[0]) : null
+}
+
+export function supportedGameSlug(value: string): value is CasinoGameSlug {
+  return isGameSlug(value)
+}
+
+export const gameCatalogMetadata = gameCatalog
+export const gameRtpBounds = { minHouseEdgeBps: MIN_EDGE_BPS, maxHouseEdgeBps: MAX_EDGE_BPS }
+export const maxCasinoWager = MAX_WAGER_CENTS / 100
+export const crashMultiplierCap = CRASH_MAX_MULTIPLIER

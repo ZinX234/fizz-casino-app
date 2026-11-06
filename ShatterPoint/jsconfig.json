@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+    "paths": { "@/*": ["./src/*"] },
+    "jsx": "react-jsx",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext"
+  },
+  "exclude": ["node_modules", "dist", ".wrangler", ".tanstack"]
+}

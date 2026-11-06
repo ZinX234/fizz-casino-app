@@ -1,0 +1,3 @@
+export default function Loading() {
+  return <main aria-busy="true" className="mx-auto min-h-screen max-w-7xl px-5 py-10 sm:px-8"><p className="sr-only">Loading account data</p><div className="h-8 w-48 animate-pulse rounded bg-white/[0.06]" /><div className="mt-5 h-4 max-w-lg animate-pulse rounded bg-white/[0.04]" /><div className="mt-9 h-10 animate-pulse rounded-full bg-white/[0.04]" /><div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <div key={index} className="h-32 animate-pulse rounded-2xl bg-white/[0.04]" />)}</div><div className="mt-7 grid gap-6 lg:grid-cols-2"><div className="h-64 animate-pulse rounded-2xl bg-white/[0.04]" /><div className="h-64 animate-pulse rounded-2xl bg-white/[0.04]" /></div></main>
+}
