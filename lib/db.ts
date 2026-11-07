@@ -41,6 +41,26 @@ export async function consumeUserRateLimit(userId: string, route: string, maxReq
   return rows[0].request_count <= maxRequests
 }
 
+export async function consumeIpRateLimit(ip: string, route: string, maxRequests: number, windowSeconds: number) {
+  const key = `ip:${route}:${ip}`
+  const { rows } = await databasePool.query<{ request_count: number }>(
+    `INSERT INTO public.api_rate_limits (rate_key, window_started_at, request_count)
+     VALUES ($1, now(), 1)
+     ON CONFLICT (rate_key) DO UPDATE SET
+       request_count = CASE
+         WHEN public.api_rate_limits.window_started_at <= now() - ($2 * interval '1 second') THEN 1
+         ELSE public.api_rate_limits.request_count + 1
+       END,
+       window_started_at = CASE
+         WHEN public.api_rate_limits.window_started_at <= now() - ($2 * interval '1 second') THEN now()
+         ELSE public.api_rate_limits.window_started_at
+       END
+     RETURNING request_count`,
+    [key, windowSeconds],
+  )
+  return rows[0]?.request_count <= maxRequests
+}
+
 export async function withTransaction<T>(
   operation: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
