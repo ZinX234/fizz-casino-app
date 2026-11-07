@@ -26,7 +26,7 @@ export default function ShatterpointGame({ embedded = false, initialMode = "real
   const sceneRef = useRef(null);
 
   const minStake = Number(setting?.minBetCents ?? 100) / 100;
-  const maxStake = Number(setting?.maxBetCents ?? 10000) / 100;
+  const maxStake = Number(setting?.maxBetCents ?? 75000) / 100;
 
   useEffect(() => {
     setStake((current) => {

@@ -30,7 +30,7 @@ export function AdminGameSettings({ initialSettings }: { initialSettings: GameRt
 
   function updateShatterpointBetLimits(slug: 'shatterpoint', field: 'minBetCents' | 'maxBetCents', cents: number) {
     if (!Number.isFinite(cents)) return
-    const bounded = Math.min(10000, Math.max(100, Math.round(cents)))
+    const bounded = Math.min(75000, Math.max(100, Math.round(cents)))
     setSettings((current) => current.map((item) => item.slug === slug
       ? { ...item, [field]: bounded }
       : item))
@@ -42,7 +42,7 @@ export function AdminGameSettings({ initialSettings }: { initialSettings: GameRt
     if (!setting) return
     if (slug === 'shatterpoint') {
       const minBetCents = setting.minBetCents ?? 100
-      const maxBetCents = setting.maxBetCents ?? 10000
+      const maxBetCents = setting.maxBetCents ?? 75000
       if (minBetCents > maxBetCents) {
         setMessage({ slug, text: 'The minimum bet cannot exceed the maximum bet.', error: true })
         return
@@ -60,7 +60,7 @@ export function AdminGameSettings({ initialSettings }: { initialSettings: GameRt
           houseEdgeBps: setting.houseEdgeBps,
           ...(slug === 'donut-division' ? { bonusBuyMultiplier: setting.bonusBuyMultiplier ?? 100 } : {}),
           ...(slug === 'shatterpoint'
-            ? { minBetCents: setting.minBetCents ?? 100, maxBetCents: setting.maxBetCents ?? 10000 }
+            ? { minBetCents: setting.minBetCents ?? 100, maxBetCents: setting.maxBetCents ?? 75000 }
             : {}),
         }),
       })
@@ -100,7 +100,7 @@ export function AdminGameSettings({ initialSettings }: { initialSettings: GameRt
               && (published.bonusBuyMultiplier ?? 100) !== (setting.bonusBuyMultiplier ?? 100))
             || (setting.slug === 'shatterpoint'
               && ((published.minBetCents ?? 100) !== (setting.minBetCents ?? 100)
-                || (published.maxBetCents ?? 10000) !== (setting.maxBetCents ?? 10000)))
+                || (published.maxBetCents ?? 75000) !== (setting.maxBetCents ?? 75000)))
           return (
             <article key={setting.slug} className="rounded-2xl border border-white/[0.07] bg-black/10 p-4 sm:p-5">
               <div className="flex items-center justify-between"><h3 className="text-sm font-bold">{setting.name}</h3><span className="rounded-full border border-white/[0.08] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/45">{setting.slug}</span></div>
@@ -127,18 +127,18 @@ export function AdminGameSettings({ initialSettings }: { initialSettings: GameRt
                   <div>
                     <label htmlFor="shatterpoint-min-bet" className="text-xs text-white/50">Minimum bet</label>
                     <div className="mt-2 flex items-center rounded-lg border border-white/10 bg-black/20 px-2.5 focus-within:border-amber-200/40">
-                      <input id="shatterpoint-min-bet" type="number" min="1" max="100" step="0.01" value={((setting.minBetCents ?? 100) / 100).toFixed(2)} onChange={(event) => updateShatterpointBetLimits('shatterpoint', 'minBetCents', Math.round(Number.parseFloat(event.target.value) * 100))} aria-label="Shatterpoint minimum bet in FC" className="w-full bg-transparent py-2 text-sm font-bold tabular-nums text-white outline-none" />
+                      <input id="shatterpoint-min-bet" type="number" min="1" max="750" step="0.01" value={((setting.minBetCents ?? 100) / 100).toFixed(2)} onChange={(event) => updateShatterpointBetLimits('shatterpoint', 'minBetCents', Math.round(Number.parseFloat(event.target.value) * 100))} aria-label="Shatterpoint minimum bet in FC" className="w-full bg-transparent py-2 text-sm font-bold tabular-nums text-white outline-none" />
                       <span className="text-xs text-white/40">FC</span>
                     </div>
                   </div>
                   <div>
                     <label htmlFor="shatterpoint-max-bet" className="text-xs text-white/50">Maximum bet</label>
                     <div className="mt-2 flex items-center rounded-lg border border-white/10 bg-black/20 px-2.5 focus-within:border-amber-200/40">
-                      <input id="shatterpoint-max-bet" type="number" min="1" max="100" step="0.01" value={((setting.maxBetCents ?? 10000) / 100).toFixed(2)} onChange={(event) => updateShatterpointBetLimits('shatterpoint', 'maxBetCents', Math.round(Number.parseFloat(event.target.value) * 100))} aria-label="Shatterpoint maximum bet in FC" className="w-full bg-transparent py-2 text-sm font-bold tabular-nums text-white outline-none" />
+                      <input id="shatterpoint-max-bet" type="number" min="1" max="750" step="0.01" value={((setting.maxBetCents ?? 75000) / 100).toFixed(2)} onChange={(event) => updateShatterpointBetLimits('shatterpoint', 'maxBetCents', Math.round(Number.parseFloat(event.target.value) * 100))} aria-label="Shatterpoint maximum bet in FC" className="w-full bg-transparent py-2 text-sm font-bold tabular-nums text-white outline-none" />
                       <span className="text-xs text-white/40">FC</span>
                     </div>
                   </div>
-                  <p className="col-span-2 text-[10px] leading-4 text-white/35">$100 and below is the casino maximum wager for all games.</p>
+                  <p className="col-span-2 text-[10px] leading-4 text-white/35">Shatterpoint supports bets up to 750 FC. Other games retain the $100 casino maximum.</p>
                 </div>
               )}
               {setting.slug === 'donut-division' && (

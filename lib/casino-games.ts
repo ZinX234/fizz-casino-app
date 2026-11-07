@@ -14,6 +14,7 @@ export const CASINO_OWNER_EMAIL = 'benarch80@gmail.com'
 const MIN_EDGE_BPS = 100
 const MAX_EDGE_BPS = 9900
 const MAX_WAGER_CENTS = 10_000
+const DEFAULT_SHATTERPOINT_MAX_BET_CENTS = 75_000
 const DEFAULT_DONUT_BONUS_BUY_MULTIPLIER = 100
 const MAX_DONUT_BONUS_BUY_MULTIPLIER = 100
 const MAX_SAFE_PICKS = 8
@@ -53,7 +54,9 @@ function readShatterpointBetLimits(configuration: unknown) {
   const minBetCents = Number(parsed.minBetCents)
   const maxBetCents = Number(parsed.maxBetCents)
   const validMin = Number.isInteger(minBetCents) && minBetCents >= 100 && minBetCents <= MAX_WAGER_CENTS ? minBetCents : 100
-  const validMax = Number.isInteger(maxBetCents) && maxBetCents >= 100 && maxBetCents <= MAX_WAGER_CENTS ? maxBetCents : MAX_WAGER_CENTS
+  const validMax = Number.isInteger(maxBetCents) && maxBetCents >= 100 && maxBetCents <= DEFAULT_SHATTERPOINT_MAX_BET_CENTS
+    ? maxBetCents
+    : DEFAULT_SHATTERPOINT_MAX_BET_CENTS
   return {
     minBetCents: validMin,
     maxBetCents: validMax >= validMin ? validMax : validMin,
@@ -273,7 +276,7 @@ export async function updateBuiltInHouseEdge(
   if (slug === 'shatterpoint' && (minBetCents !== undefined || maxBetCents !== undefined)) {
     if (typeof minBetCents !== 'number' || typeof maxBetCents !== 'number'
       || !Number.isInteger(minBetCents) || !Number.isInteger(maxBetCents)
-      || minBetCents < 100 || maxBetCents < minBetCents || maxBetCents > MAX_WAGER_CENTS) {
+      || minBetCents < 100 || maxBetCents < minBetCents || maxBetCents > DEFAULT_SHATTERPOINT_MAX_BET_CENTS) {
       throw new CasinoGameError('Shatterpoint minimum and maximum bets are invalid.')
     }
   }
@@ -759,8 +762,11 @@ export async function startCasinoRound(input: {
   if (input.buyBonus && input.slug !== 'donut-division') {
     throw new CasinoGameError('Bonus purchases are only available for Donut Division.')
   }
-  if (!Number.isInteger(input.wagerCents) || input.wagerCents < 100 || input.wagerCents > MAX_WAGER_CENTS) {
-    throw new CasinoGameError('Wager must be between $1.00 and $100.00.')
+  const maximumWagerCents = input.slug === 'shatterpoint' ? DEFAULT_SHATTERPOINT_MAX_BET_CENTS : MAX_WAGER_CENTS
+  if (!Number.isInteger(input.wagerCents) || input.wagerCents < 100 || input.wagerCents > maximumWagerCents) {
+    throw new CasinoGameError(input.slug === 'shatterpoint'
+      ? 'Shatterpoint wager is outside the configured range.'
+      : 'Wager must be between $1.00 and $100.00.')
   }
   if (input.slug === 'mines' && (!Number.isInteger(input.mineCount) || input.mineCount < 1 || input.mineCount > 24)) {
     throw new CasinoGameError('Choose between 1 and 24 mines.')
@@ -849,7 +855,8 @@ export async function startCasinoRound(input: {
       ? readDonutBonusBuyMultiplier(games[0].configuration)
       : 1
     const wagerCents = input.wagerCents * bonusBuyMultiplier
-    if (!Number.isSafeInteger(wagerCents) || wagerCents > MAX_WAGER_CENTS) {
+    if (!Number.isSafeInteger(wagerCents)
+      || wagerCents > (input.slug === 'shatterpoint' ? DEFAULT_SHATTERPOINT_MAX_BET_CENTS : MAX_WAGER_CENTS)) {
       throw new CasinoGameError('This bonus purchase exceeds the $100 maximum wager. Lower your bet or ask an administrator to adjust the bonus price.')
     }
     const wagerAmount = (wagerCents / 100).toFixed(2)

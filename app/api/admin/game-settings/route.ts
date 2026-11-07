@@ -7,8 +7,8 @@ const updateSchema = z.object({
   slug: z.enum(['crash', 'towers', 'mines', 'vault-heist', 'donut-division', 'fizz-rush', 'shatterpoint']),
   houseEdgeBps: z.number().int().min(100).max(9900).multipleOf(10),
   bonusBuyMultiplier: z.number().int().min(1).max(100).optional(),
-  minBetCents: z.number().int().min(100).max(10000).optional(),
-  maxBetCents: z.number().int().min(100).max(10000).optional(),
+  minBetCents: z.number().int().min(100).max(75000).optional(),
+  maxBetCents: z.number().int().min(100).max(75000).optional(),
 }).strict()
 
 export async function POST(request: Request) {
