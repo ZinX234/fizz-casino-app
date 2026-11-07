@@ -4,6 +4,7 @@ import { getAvailableGames, getProgressionSnapshot, getWalletSnapshot, type Game
 import { getPlayerUsername } from '@/lib/player-profile'
 import { getKickLiveStatus } from '@/lib/kick-status'
 import type { PlayerProgression } from '@/lib/progression'
+import { forfeitActiveShatterpointRound } from '@/lib/casino-games'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Casino lobby | Fizz Casino' }
@@ -29,6 +30,7 @@ export default async function CasinoPage() {
   let currentPlayer: { id: string; name: string; email: string; balance: string | null; currency: string | null; progression: PlayerProgression } | null = null
   if (session?.user) {
     try {
+      await forfeitActiveShatterpointRound(session.user.id)
       const [wallet, progression, username] = await Promise.all([
         getWalletSnapshot(session.user.id),
         getProgressionSnapshot(session.user.id),

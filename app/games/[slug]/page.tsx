@@ -75,7 +75,7 @@ export default async function GamePage({
     return (
       <main className="h-svh overflow-hidden bg-[#090a0d] text-white">
         <header className="flex h-[72px] items-center justify-between border-b border-white/[0.08] bg-[#090a0d] px-4 sm:px-6">
-          <Link href="/casino" className="flex items-center gap-3 text-sm font-bold text-white">
+          <Link href="/casino" onClick={() => window.dispatchEvent(new CustomEvent("fizz:shatterpoint-leave"))} className="flex items-center gap-3 text-sm font-bold text-white">
             <img src="/fizz-casino-logo.png" alt="Fizz Casino" className="h-12 w-12 object-contain" />
             <span className="hidden sm:inline">Lobby</span>
           </Link>

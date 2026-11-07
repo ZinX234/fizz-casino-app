@@ -1518,6 +1518,32 @@ export async function getActiveCasinoRound(userId: string, slug: CasinoGameSlug)
   return rows[0] ? roundView(rows[0]) : null
 }
 
+export async function forfeitActiveShatterpointRound(userId: string): Promise<boolean> {
+  return withTransaction(async (client) => {
+    const { rows } = await client.query<{ session_id: string }>(
+      `SELECT gs.id::text AS session_id
+       FROM public.game_sessions gs
+       JOIN public.games g ON g.id = gs.game_id
+       JOIN public.bets b ON b.game_session_id = gs.id AND b.user_id = gs.user_id
+       WHERE gs.user_id = $1::uuid
+         AND g.slug = 'shatterpoint'
+         AND gs.status = 'active'
+         AND b.status = 'pending'
+       ORDER BY gs.started_at DESC
+       LIMIT 1
+       FOR UPDATE OF gs, b`,
+      [userId],
+    )
+    if (!rows[0]) return false
+    const row = await loadRound(client, userId, 'shatterpoint', rows[0].session_id, false)
+    const outcome = parseOutcome(row.outcome)
+    outcome.canCashOut = false
+    outcome.forfeit = true
+    await settleRound(client, row, userId, outcome, '0.00', 'loss')
+    return true
+  })
+}
+
 export function supportedGameSlug(value: string): value is CasinoGameSlug {
   return isGameSlug(value)
 }
