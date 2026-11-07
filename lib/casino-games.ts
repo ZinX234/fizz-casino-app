@@ -1197,7 +1197,7 @@ export async function playCasinoAction(input: {
   userId: string
   slug: CasinoGameSlug
   sessionId: string
-  action: 'pick' | 'cashout' | 'sync' | 'bonus'
+  action: 'pick' | 'cashout' | 'sync' | 'bonus' | 'forfeit'
   position?: number
   choiceId?: string
   requestId?: string
@@ -1239,7 +1239,20 @@ export async function playCasinoAction(input: {
       if (row.bet_status !== 'pending' || row.session_status !== 'active') {
         throw new CasinoGameError('This round is already finished.', 409)
       }
-      if (input.action === 'cashout') {
+        if (input.action === 'forfeit') {
+          outcome.canCashOut = false
+          outcome.forfeit = true
+          if (input.requestId) outcome.lastActionRequestId = input.requestId
+          await settleRound(client, row, input.userId, outcome, '0.00', 'loss')
+          return roundView({
+            ...row,
+            bet_status: 'settled',
+            session_status: 'completed',
+            payout_amount: '0.00',
+            outcome,
+          })
+        }
+        if (input.action === 'cashout') {
         const completedStages = Number(outcome.currentStage ?? 0)
         if (completedStages < 1) throw new CasinoGameError('Clear at least one stage before cashing out.')
         const multiplier = shatterpointMultiplierForStage(completedStages, Number(outcome.rtpBps))

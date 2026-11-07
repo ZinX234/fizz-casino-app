@@ -269,13 +269,52 @@ export default function ShatterpointGame({ embedded = false, initialMode = "real
     }
   };
 
-  const exit = () => {
+  const forfeitRound = useCallback(async () => {
+    if (mode !== "real" || !sessionId) return;
+    const roundToForfeit = sessionId;
+    try {
+      await fetch("/api/games/shatterpoint/play", {
+        method: "POST",
+        credentials: "same-origin",
+        keepalive: true,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "forfeit",
+          sessionId: roundToForfeit,
+          requestId: crypto.randomUUID(),
+        }),
+      });
+      await refreshWallet();
+    } catch {
+      // Navigation may still proceed; the server round remains bounded and expires automatically.
+    } finally {
+      setSessionId(null);
+    }
+  }, [mode, sessionId, refreshWallet]);
+
+  const exit = async () => {
+    await forfeitRound();
     sceneRef.current?.enterMenu?.(stageCount);
     setPhase("menu");
     setSessionId(null);
     setStage(0);
     setResult(null);
   };
+
+  useEffect(() => {
+    if (mode !== "real" || !sessionId) return undefined;
+    const handlePageHide = () => {
+      const roundToForfeit = sessionId;
+      const body = new Blob([JSON.stringify({
+        action: "forfeit",
+        sessionId: roundToForfeit,
+        requestId: crypto.randomUUID(),
+      })], { type: "application/json" });
+      navigator.sendBeacon("/api/games/shatterpoint/play", body);
+    };
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [mode, sessionId]);
 
   return (
     <div className={`relative w-full overflow-hidden bg-[#04050a] text-white ${embedded ? "h-full" : "min-h-[100svh]"}`}>

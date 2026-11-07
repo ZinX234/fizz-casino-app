@@ -10,6 +10,7 @@ const requestSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('bonus'), sessionId: z.string().uuid(), requestId: z.string().uuid(), choiceId: z.enum(['sticky', 'pick', 'surveillance']) }).strict(),
   z.object({ action: z.literal('cashout'), sessionId: z.string().uuid(), position: z.number().finite().optional(), requestId: z.string().uuid().optional() }).strict(),
   z.object({ action: z.literal('sync'), sessionId: z.string().uuid() }).strict(),
+  z.object({ action: z.literal('forfeit'), sessionId: z.string().uuid(), requestId: z.string().uuid().optional() }).strict(),
   z.object({ action: z.literal('resume') }).strict(),
 ])
 
@@ -36,6 +37,9 @@ export async function POST(request: Request, context: { params: Promise<{ slug: 
     }
     if (body.data.action === 'bonus' && rawSlug !== 'donut-division') {
       return Response.json({ error: 'Bonus choices are only available for Donut Division.' }, { status: 400 })
+    }
+    if (body.data.action === 'forfeit' && rawSlug !== 'shatterpoint') {
+      return Response.json({ error: 'Round forfeit is only available for Shatterpoint.' }, { status: 400 })
     }
     if (body.data.action === 'start' && body.data.buyBonus && rawSlug !== 'donut-division') {
       return Response.json({ error: 'Bonus purchases are only available for Donut Division.' }, { status: 400 })
