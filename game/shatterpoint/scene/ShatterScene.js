@@ -321,6 +321,8 @@ export class ShatterScene {
     this.progress = 0;
     this.stages = stages;
     this.bridge?.clear();
+    this.bridge?.clearHover();
+    this.hovered = null;
     this.bridge?.build(stages);
     this.env?.setDestination(endZ(stages) - 1.6);
     this.env?.setProgress(0);
@@ -333,7 +335,10 @@ export class ShatterScene {
     this.mode = "play";
     this.interactive = false;
     this.progress = 0;
+    this.shake = 0;
+    this.hovered = null;
     this.bridge.clear();
+    this.bridge.clearHover();
     this.bridge.build(stages);
     this.env.setDestination(endZ(stages) - 1.6);
     this.env.setProgress(0);

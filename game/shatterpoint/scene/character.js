@@ -6,6 +6,7 @@ export class Character {
     this.theme = theme;
     this.group = new THREE.Group();
     this.group.position.set(0, 0.6, 0);
+    this.animationVersion = 0;
 
     const body = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.22, 0.72, 5, 8),
@@ -31,17 +32,26 @@ export class Character {
   }
 
   reset(x, z) {
+    this.animationVersion += 1;
     this.group.position.set(x, 0.6, z);
+    this.group.rotation.set(0, 0, 0);
+    this.group.quaternion.identity();
+    this.group.scale.set(1, 1, 1);
   }
 
   update() {}
 
   async walkTo(x, z, duration, onStep) {
+    const animationVersion = this.animationVersion;
     const start = this.group.position.clone();
     const end = new THREE.Vector3(x, 0.6, z);
     const startedAt = performance.now();
     await new Promise((resolve) => {
       const tick = (now) => {
+        if (animationVersion !== this.animationVersion) {
+          resolve();
+          return;
+        }
         const t = Math.min(1, (now - startedAt) / duration);
         this.group.position.lerpVectors(start, end, 1 - Math.pow(1 - t, 3));
         if (t < 1) requestAnimationFrame(tick);
@@ -53,9 +63,14 @@ export class Character {
   }
 
   async fall(duration) {
+    const animationVersion = this.animationVersion;
     const startedAt = performance.now();
     await new Promise((resolve) => {
       const tick = (now) => {
+        if (animationVersion !== this.animationVersion) {
+          resolve();
+          return;
+        }
         const t = Math.min(1, (now - startedAt) / duration);
         this.group.position.y = 0.6 - t * 5;
         this.group.rotation.z = t * 1.4;
@@ -67,7 +82,9 @@ export class Character {
   }
 
   celebrate() {
-    this.group.rotation.z = 0;
+    this.group.rotation.set(0, 0, 0);
+    this.group.quaternion.identity();
+    this.group.position.y = 0.6;
   }
 
   dispose() {
