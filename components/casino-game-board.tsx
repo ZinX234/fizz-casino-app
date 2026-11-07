@@ -205,11 +205,34 @@ function CrashDisplay({ round, multiplier }: { round: GameRoundView | null; mult
 function MinesBoard({ round, mineCount, pending, onPick }: { round: GameRoundView | null; mineCount: number; pending: boolean; onPick: (position: number) => void }) {
   const picked = new Set(round?.picks ?? [])
   const mines = new Set(round?.revealedMines ?? [])
+  const [revealing, setRevealing] = useState<number | null>(null)
+  const revealTimer = useRef<number | null>(null)
+
+  useEffect(() => () => {
+    if (revealTimer.current !== null) window.clearTimeout(revealTimer.current)
+  }, [])
+
+  function reveal(position: number) {
+    if (revealing !== null || pending) return
+    setRevealing(position)
+    revealTimer.current = window.setTimeout(() => setRevealing(null), 620)
+    onPick(position)
+  }
+
   return <div className="w-full max-w-[430px]"><div className="mb-4 flex items-center justify-between text-xs text-white/40"><span>5 × 5 board</span><span>{round?.mineCount ?? mineCount} mines</span></div><div className="grid grid-cols-5 gap-2 sm:gap-3">{Array.from({ length: 25 }, (_, position) => {
     const isPicked = picked.has(position)
     const isMine = mines.has(position)
     const isKnownSafe = round?.status === 'settled' && !isMine
-    return <button key={position} type="button" aria-label={`Tile ${position + 1}${isMine ? ', mine' : isPicked ? ', revealed safe' : ''}`} disabled={pending || round?.status !== 'active' || isPicked} onClick={() => onPick(position)} className={`aspect-square rounded-xl border text-lg font-black transition disabled:cursor-default ${isMine ? 'border-rose-200/30 bg-rose-200/[0.09] text-rose-200' : isPicked || isKnownSafe ? 'border-emerald-200/25 bg-emerald-200/[0.07] text-emerald-100' : 'border-white/[0.08] bg-white/[0.035] text-white/15 hover:border-amber-100/30 hover:bg-amber-100/[0.05]'}`}>{isMine ? '×' : isPicked || isKnownSafe ? '◆' : '?'}</button>
+    const isRevealing = revealing === position
+    return <button key={position} type="button" aria-label={`Tile ${position + 1}${isMine ? ', mine' : isPicked ? ', revealed safe' : ''}`} disabled={pending || round?.status !== 'active' || isPicked} onClick={() => reveal(position)} className={`aspect-square overflow-hidden rounded-xl border text-lg font-black transition disabled:cursor-default ${isMine ? 'border-rose-200/30 bg-rose-200/[0.09]' : isPicked || isKnownSafe ? 'border-emerald-200/25 bg-emerald-200/[0.07]' : 'border-white/[0.08] bg-white/[0.035] text-white/15 hover:border-amber-100/30 hover:bg-amber-100/[0.05]'}`}>
+      {isMine
+        ? <img src="/games/bomb.png" alt="Mine" className={`mine-tile-image mine-bomb-image${isRevealing ? ' mine-reveal-bomb' : ''}`} />
+        : isPicked || isKnownSafe
+          ? <img src="/games/emerald.png" alt="Safe emerald" className={`mine-tile-image${isRevealing ? ' mine-reveal-safe' : ''}`} />
+          : isRevealing
+            ? <span aria-hidden="true" className="mine-reveal-pending" />
+            : <span aria-hidden="true">?</span>}
+    </button>
   })}</div><p className="mt-4 text-center text-[11px] text-white/35">{round?.status === 'active' ? 'Reveal every safe tile to win automatically, or cash out after a safe pick. One mine ends the round.' : 'Start a round to reveal tiles.'}</p></div>
 }
 
