@@ -770,7 +770,7 @@ export async function startCasinoRound(input: {
     throw new CasinoGameError('Bonus purchases are only available for Donut Division.')
   }
   const maximumWagerCents = input.slug === 'shatterpoint' ? DEFAULT_SHATTERPOINT_MAX_BET_CENTS : MAX_WAGER_CENTS
-  if (!Number.isInteger(input.wagerCents) || input.wagerCents < 100 || input.wagerCents > maximumWagerCents) {
+  if (!Number.isInteger(input.wagerCents) || input.wagerCents < 25 || input.wagerCents > maximumWagerCents) {
     throw new CasinoGameError(input.slug === 'shatterpoint'
       ? 'Shatterpoint wager is outside the configured range.'
       : 'Wager must be between $1.00 and $100.00.')
@@ -850,9 +850,12 @@ export async function startCasinoRound(input: {
     if (!games[0]) throw new CasinoGameError('This game is temporarily unavailable.', 404)
     if (input.slug === 'shatterpoint') {
       const betLimits = readShatterpointBetLimits(games[0].configuration)
-      if (input.wagerCents < betLimits.minBetCents || input.wagerCents > betLimits.maxBetCents) {
+      const wagerFizzcoins = input.wagerCents * 4
+      const minFizzcoins = betLimits.minBetCents / 100
+      const maxFizzcoins = betLimits.maxBetCents / 100
+      if (wagerFizzcoins < minFizzcoins || wagerFizzcoins > maxFizzcoins) {
         throw new CasinoGameError(
-          `Shatterpoint stake must be between ${(betLimits.minBetCents / 100).toFixed(2)} and ${(betLimits.maxBetCents / 100).toFixed(2)} FC.`,
+          `Shatterpoint stake must be between ${minFizzcoins.toFixed(0)} and ${maxFizzcoins.toFixed(0)} Fizzcoins.`,
           409,
         )
       }
