@@ -227,7 +227,7 @@ export default function ShatterpointGame({ embedded = false, initialMode = "real
         setResult({ status: "loss", payout: 0 });
         if (mode === "real") {
           await refreshWallet();
-          setSessionId(null);
+          // Keep the terminal round ID until Exit/Retry/navigation consumes it.
         }
         track("shatterpoint_round_complete", { mode, result: "loss", stage });
         setPhase("results");

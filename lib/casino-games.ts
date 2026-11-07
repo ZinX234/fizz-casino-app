@@ -1236,9 +1236,12 @@ export async function playCasinoAction(input: {
           return roundView(row)
         }
       }
-      if (row.bet_status !== 'pending' || row.session_status !== 'active') {
-        throw new CasinoGameError('This round is already finished.', 409)
+        if (input.action === 'forfeit' && outcome.result === 'loss' && row.bet_status === 'settled' && row.session_status === 'completed') {
+          return roundView(row)
       }
+        if (row.bet_status !== 'pending' || row.session_status !== 'active') {
+          throw new CasinoGameError('This round is already finished.', 409)
+        }
         if (input.action === 'forfeit') {
           outcome.canCashOut = false
           outcome.forfeit = true
