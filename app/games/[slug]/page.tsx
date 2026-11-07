@@ -79,9 +79,6 @@ export default async function GamePage({
           <ShatterpointLobbyExit />
           <div className="flex items-center gap-2">
             <LiveWalletChip initialBalance={wallet.balance ?? 0} />
-            <Link href="/account" className="rounded-lg bg-[#6b19f5] px-3.5 py-2 text-xs font-bold text-white">
-              Wallet
-            </Link>
           </div>
         </header>
         <div className="h-[calc(100svh-72px)] w-full">

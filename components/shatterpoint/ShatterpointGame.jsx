@@ -311,15 +311,9 @@ export default function ShatterpointGame({ embedded = false, initialMode = "real
       })], { type: "application/json" });
       navigator.sendBeacon("/api/games/shatterpoint/play", body);
     };
-    const handleLeave = async () => {
-      await forfeitRound();
-      router.replace("/casino");
-    };
     window.addEventListener("pagehide", handlePageHide);
-    window.addEventListener("fizz:shatterpoint-leave", handleLeave);
     return () => {
       window.removeEventListener("pagehide", handlePageHide);
-      window.removeEventListener("fizz:shatterpoint-leave", handleLeave);
     };
   }, [mode, sessionId, forfeitRound, router]);
 

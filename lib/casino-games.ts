@@ -1038,6 +1038,32 @@ async function settleRound(
   )
   const wallet = wallets[0]
   if (!wallet) throw new CasinoGameError('Wallet record could not be loaded.', 500)
+
+  const { rows: wagerDebits } = await client.query<{ id: string }>(
+    `SELECT id::text FROM public.wallet_transactions
+     WHERE user_id = $1::uuid AND reference_id = $2::uuid AND type = 'bet' LIMIT 1`,
+    [userId, row.bet_id],
+  )
+  if (!wagerDebits[0]) {
+    const wagerAmount = row.wager_amount !== undefined
+      ? Number(row.wager_amount)
+      : await client.query<{ wager_amount: string }>(
+          `SELECT wager_amount::text FROM public.bets WHERE id = $1::uuid`,
+          [row.bet_id],
+        ).then(({ rows }) => Number(rows[0]?.wager_amount ?? 0))
+    if (!Number.isFinite(wagerAmount) || wagerAmount <= 0) {
+      throw new CasinoGameError('The wager debit could not be reconciled.', 500)
+    }
+    await insertWalletLedger(client, {
+      userId,
+      walletId: wallet.id,
+      amount: (-wagerAmount).toFixed(2),
+      type: 'bet',
+      betId: row.bet_id,
+      idempotencyKey: `game:wager-repair:${row.bet_id}`,
+      description: `${row.slug?.[0]?.toUpperCase?.() ?? 'Game'} wager debit reconciliation`,
+    })
+  }
   outcome.result = result
   outcome.payoutAmount = payoutAmount
   await client.query(
