@@ -32,7 +32,7 @@ type CasinoHomeProps = {
   dataError: boolean
 }
 
-const fizzLogo = '/fizz-casino-logo.png'
+const fizzLogo = '/fizzlogo.png'
 function money(amount: string | null, currency: string | null) {
   if (amount === null || currency === null) return 'Balance unavailable'
   return formatFizzcoins(amount, currency)
@@ -58,7 +58,7 @@ function SiteHeader({ currentPlayer }: Pick<CasinoHomeProps, 'currentPlayer'>) {
     <header className="sticky top-0 z-30 border-b border-white/[0.07] bg-[#0b0c10]/90 backdrop-blur-xl">
       <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between px-4 sm:px-8">
         <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="Fizz Casino home">
-          <img src={fizzLogo} alt="Fizz Casino" className="h-10 w-12 object-contain" />
+          <img src={fizzLogo} alt="Fizz Casino" className="h-10 w-24 object-contain" />
         </Link>
 
         <nav aria-label="Main navigation" className="hidden items-center gap-7 lg:flex">
@@ -260,7 +260,7 @@ export function CasinoPageHeader({ title, eyebrow, detail }: { title: string; ey
 }
 
 export function CasinoHeaderForAccount() {
-  return <div className="border-b border-white/[0.07] bg-[#0b0c10]"><div className="mx-auto flex h-[68px] max-w-7xl items-center justify-between px-5 sm:px-8"><Link href="/" className="flex items-center gap-2" aria-label="Fizz Casino home"><img src={fizzLogo} alt="Fizz Casino" className="h-9 w-11 object-contain" /></Link><Link href="/" className="text-sm text-white/55 hover:text-white">Back to lobby <ArrowUpRight aria-hidden="true" className="ml-1 inline size-3.5" /></Link></div></div>
+  return <div className="border-b border-white/[0.07] bg-[#0b0c10]"><div className="mx-auto flex h-[68px] max-w-7xl items-center justify-between px-5 sm:px-8"><Link href="/" className="flex items-center gap-2" aria-label="Fizz Casino home"><img src={fizzLogo} alt="Fizz Casino" className="h-9 w-20 object-contain" /></Link><Link href="/" className="text-sm text-white/55 hover:text-white">Back to lobby <ArrowUpRight aria-hidden="true" className="ml-1 inline size-3.5" /></Link></div></div>
 }
 
 export function AccountNavigation({ active }: { active: 'overview' | 'profile' | 'responsible' | 'support' }) {

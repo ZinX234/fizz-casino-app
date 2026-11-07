@@ -85,7 +85,7 @@ function LobbyRail() {
 
   return (
     <aside aria-label="Casino navigation" className="fixed inset-y-0 left-0 z-40 hidden w-[60px] flex-col items-center border-r border-white/[0.08] bg-[#101116] py-3 md:flex">
-      <Link href="/casino" aria-label="Fizz Casino lobby" className="mb-4 flex size-12 items-center justify-center overflow-hidden rounded-xl bg-[#101116]"><img src="/fizz-casino-logo.png" alt="Fizz Casino" className="size-full object-contain" /></Link>
+      <Link href="/casino" aria-label="Fizz Casino lobby" className="mb-4 flex size-12 items-center justify-center overflow-hidden rounded-xl bg-[#101116]"><img src="/fizzlogo.png" alt="Fizz Casino" className="h-10 w-10 object-contain" /></Link>
       <nav className="flex w-full flex-col items-center gap-2 border-y border-white/[0.06] py-3">
         {links.map(({ href, label, icon: Icon }, index) => (
           <Link key={href} href={href} aria-label={label} title={label} className={`flex size-10 items-center justify-center rounded-xl transition ${index === 0 ? 'bg-[#6c20f4] text-white shadow-[0_8px_24px_-12px_rgba(124,58,237,.9)]' : 'text-white/55 hover:bg-white/[0.06] hover:text-white'}`}>
@@ -105,7 +105,7 @@ function LobbyHeader({ currentPlayer }: { currentPlayer: LobbyPlayer | null }) {
   <header className="sticky top-0 z-30 border-b border-white/[0.08] bg-[#090a0d]/95 backdrop-blur-xl md:ml-[60px]">
   <div className="mx-auto flex h-[72px] max-w-[1280px] items-center justify-between gap-3 px-3 sm:px-5">
   <Link href="/casino" className="flex shrink-0 items-center gap-2.5" aria-label="Fizz Casino lobby home">
-  <img src="/fizz-casino-logo.png" alt="Fizz Casino" className="size-16 object-contain" />
+  <img src="/fizzlogo.png" alt="Fizz Casino" className="h-12 w-28 object-contain" />
         </Link>
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
           {currentPlayer ? (
