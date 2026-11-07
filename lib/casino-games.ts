@@ -337,11 +337,18 @@ export async function updateBuiltInHouseEdge(
       `UPDATE public.games
        SET configuration = configuration || jsonb_build_object('houseEdgeBps', $2::int)
          || CASE WHEN $3::int IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('bonusBuyMultiplier', $3::int) END
-         || CASE WHEN $10::boolean THEN jsonb_build_object('minBetCents', $4::int, 'maxBetCents', $5::int) ELSE '{}'::jsonb END,
+         || CASE WHEN $6::boolean THEN jsonb_build_object('minBetCents', $4::int, 'maxBetCents', $5::int) ELSE '{}'::jsonb END,
          updated_at = now()
        WHERE id = $1::uuid
        RETURNING configuration`,
-      [game.id, houseEdgeBps, bonusBuyMultiplier ?? null, minBetCents ?? null, maxBetCents ?? null, null, null, null, null, slug === 'shatterpoint' && minBetCents !== undefined && maxBetCents !== undefined],
+      [
+        game.id,
+        houseEdgeBps,
+        bonusBuyMultiplier ?? null,
+        minBetCents ?? null,
+        maxBetCents ?? null,
+        slug === 'shatterpoint' && minBetCents !== undefined && maxBetCents !== undefined,
+      ],
     )
     if (!updatedGames[0]) throw new CasinoGameError('Game settings could not be confirmed after saving.', 500)
     const persistedHouseEdgeBps = readHouseEdge(updatedGames[0].configuration)

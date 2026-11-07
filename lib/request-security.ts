@@ -28,6 +28,11 @@ export function isAllowedRequestOrigin(request: Request) {
     addOrigin(new URL(request.url).origin)
     addOrigin(process.env.VERCEL_URL)
     addOrigin(process.env.VERCEL_PROJECT_PRODUCTION_URL)
+    addOrigin(process.env.NEXT_PUBLIC_SITE_URL)
+    const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim()
+      || request.headers.get('host')?.trim()
+    const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim() || 'https'
+    if (forwardedHost) addOrigin(`${forwardedProto}://${forwardedHost}`)
   }
 
   return allowedOrigins.has(normalizedOrigin)
