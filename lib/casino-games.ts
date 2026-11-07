@@ -48,6 +48,18 @@ function readHouseEdge(configuration: unknown) {
   return Number.isInteger(value) && value >= MIN_EDGE_BPS && value <= MAX_EDGE_BPS ? value : 200
 }
 
+function readShatterpointBetLimits(configuration: unknown) {
+  const parsed = parseOutcome(configuration)
+  const minBetCents = Number(parsed.minBetCents)
+  const maxBetCents = Number(parsed.maxBetCents)
+  const validMin = Number.isInteger(minBetCents) && minBetCents >= 100 && minBetCents <= MAX_WAGER_CENTS ? minBetCents : 100
+  const validMax = Number.isInteger(maxBetCents) && maxBetCents >= 100 && maxBetCents <= MAX_WAGER_CENTS ? maxBetCents : MAX_WAGER_CENTS
+  return {
+    minBetCents: validMin,
+    maxBetCents: validMax >= validMin ? validMax : validMin,
+  }
+}
+
 function readDonutBonusBuyMultiplier(configuration: unknown) {
   const value = configuration && typeof configuration === 'object' && 'bonusBuyMultiplier' in configuration
     ? Number((configuration as { bonusBuyMultiplier: unknown }).bonusBuyMultiplier)
@@ -111,6 +123,7 @@ export async function getBuiltInRtpSettings(): Promise<GameRtpSetting[]> {
     const vaultConfiguration = row.slug === 'vault-heist' ? sanitizeVaultHeistConfig(configuration.vaultHeist) : null
     const activeProfile = vaultConfiguration?.profiles.find((profile) => profile.id === vaultConfiguration.activeProfileId)
     const rtpBps = activeProfile?.rtpBps ?? (10_000 - readHouseEdge(row.configuration))
+    const betLimits = row.slug === 'shatterpoint' ? readShatterpointBetLimits(row.configuration) : null
     return {
       slug: row.slug,
       name: row.name,
@@ -119,6 +132,7 @@ export async function getBuiltInRtpSettings(): Promise<GameRtpSetting[]> {
       ...(row.slug === 'donut-division'
         ? { bonusBuyMultiplier: readDonutBonusBuyMultiplier(row.configuration) }
         : {}),
+      ...(betLimits ? betLimits : {}),
     }
   })
 }
@@ -245,6 +259,8 @@ export async function updateBuiltInHouseEdge(
   slug: CasinoGameSlug,
   houseEdgeBps: number,
   bonusBuyMultiplier?: number,
+  minBetCents?: number,
+  maxBetCents?: number,
 ) {
   if (!Number.isInteger(houseEdgeBps) || houseEdgeBps < MIN_EDGE_BPS || houseEdgeBps > MAX_EDGE_BPS || houseEdgeBps % 10 !== 0) {
     throw new CasinoGameError('House edge must be between 1% and 99%, in 0.1% increments.')
@@ -253,6 +269,16 @@ export async function updateBuiltInHouseEdge(
     && (slug !== 'donut-division' || !Number.isInteger(bonusBuyMultiplier)
       || bonusBuyMultiplier < 1 || bonusBuyMultiplier > MAX_DONUT_BONUS_BUY_MULTIPLIER)) {
     throw new CasinoGameError('Donut Division bonus buy multiplier must be between 1× and 100×.')
+  }
+  if (slug === 'shatterpoint' && (minBetCents !== undefined || maxBetCents !== undefined)) {
+    if (typeof minBetCents !== 'number' || typeof maxBetCents !== 'number'
+      || !Number.isInteger(minBetCents) || !Number.isInteger(maxBetCents)
+      || minBetCents < 100 || maxBetCents < minBetCents || maxBetCents > MAX_WAGER_CENTS) {
+      throw new CasinoGameError('Shatterpoint minimum and maximum bets are invalid.')
+    }
+  }
+  if (slug !== 'shatterpoint' && (minBetCents !== undefined || maxBetCents !== undefined)) {
+    throw new CasinoGameError('Minimum and maximum bets are only available for Shatterpoint.')
   }
 
   if (slug === 'vault-heist') {
@@ -307,17 +333,23 @@ export async function updateBuiltInHouseEdge(
     const { rows: updatedGames } = await client.query<{ configuration: unknown }>(
       `UPDATE public.games
        SET configuration = configuration || jsonb_build_object('houseEdgeBps', $2::int)
-         || CASE WHEN $3::int IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('bonusBuyMultiplier', $3::int) END,
+         || CASE WHEN $3::int IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('bonusBuyMultiplier', $3::int) END
+         || CASE WHEN $10::boolean THEN jsonb_build_object('minBetCents', $4::int, 'maxBetCents', $5::int) ELSE '{}'::jsonb END,
          updated_at = now()
        WHERE id = $1::uuid
        RETURNING configuration`,
-      [game.id, houseEdgeBps, bonusBuyMultiplier ?? null],
+      [game.id, houseEdgeBps, bonusBuyMultiplier ?? null, minBetCents ?? null, maxBetCents ?? null, null, null, null, null, slug === 'shatterpoint' && minBetCents !== undefined && maxBetCents !== undefined],
     )
     if (!updatedGames[0]) throw new CasinoGameError('Game settings could not be confirmed after saving.', 500)
     const persistedHouseEdgeBps = readHouseEdge(updatedGames[0].configuration)
+    const persistedBetLimits = slug === 'shatterpoint' ? readShatterpointBetLimits(updatedGames[0].configuration) : null
     if (persistedHouseEdgeBps !== houseEdgeBps
       || (bonusBuyMultiplier !== undefined && readDonutBonusBuyMultiplier(updatedGames[0].configuration) !== bonusBuyMultiplier)) {
       throw new CasinoGameError('Saved game odds did not match the requested settings.', 500)
+    }
+    if (persistedBetLimits && minBetCents !== undefined && maxBetCents !== undefined
+      && (persistedBetLimits.minBetCents !== minBetCents || persistedBetLimits.maxBetCents !== maxBetCents)) {
+      throw new CasinoGameError('Saved Shatterpoint bet limits did not match the requested settings.', 500)
     }
     await client.query(
       `INSERT INTO public.audit_logs (actor_user_id, action, entity_type, entity_id, details)
@@ -348,6 +380,7 @@ export async function updateBuiltInHouseEdge(
       ...(slug === 'donut-division'
         ? { bonusBuyMultiplier: readDonutBonusBuyMultiplier(updatedGames[0].configuration) }
         : {}),
+      ...(slug === 'shatterpoint' && persistedBetLimits ? persistedBetLimits : {}),
     }
   })
 }
@@ -802,6 +835,15 @@ export async function startCasinoRound(input: {
       `SELECT id::text, configuration FROM public.games WHERE slug = $1 AND status = 'available' FOR SHARE`, [input.slug],
     )
     if (!games[0]) throw new CasinoGameError('This game is temporarily unavailable.', 404)
+    if (input.slug === 'shatterpoint') {
+      const betLimits = readShatterpointBetLimits(games[0].configuration)
+      if (input.wagerCents < betLimits.minBetCents || input.wagerCents > betLimits.maxBetCents) {
+        throw new CasinoGameError(
+          `Shatterpoint stake must be between ${(betLimits.minBetCents / 100).toFixed(2)} and ${(betLimits.maxBetCents / 100).toFixed(2)} FC.`,
+          409,
+        )
+      }
+    }
 
     const bonusBuyMultiplier = input.buyBonus
       ? readDonutBonusBuyMultiplier(games[0].configuration)

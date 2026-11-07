@@ -13,7 +13,10 @@ export default function ShatterpointGame({ embedded = false, initialMode = "real
   const [stageCount, setStageCount] = useState(DEFAULT_STAGE_COUNT);
   const [stage, setStage] = useState(0);
   const [locked, setLocked] = useState(false);
-  const [stake, setStake] = useState("1.00");
+  const [stake, setStake] = useState(() => {
+    const configuredMin = Number(setting?.minBetCents ?? 100) / 100;
+    return configuredMin.toFixed(2);
+  });
   const [balance, setBalance] = useState(Number(initialBalance) || 0);
   const [ladder, setLadder] = useState([]);
   const [result, setResult] = useState(null);
@@ -22,8 +25,18 @@ export default function ShatterpointGame({ embedded = false, initialMode = "real
   const [sceneError, setSceneError] = useState(null);
   const sceneRef = useRef(null);
 
-  const minStake = 1;
-  const maxStake = 100;
+  const minStake = Number(setting?.minBetCents ?? 100) / 100;
+  const maxStake = Number(setting?.maxBetCents ?? 10000) / 100;
+
+  useEffect(() => {
+    setStake((current) => {
+      const numeric = Number(current);
+      const bounded = Number.isFinite(numeric)
+        ? Math.min(maxStake, Math.max(minStake, numeric))
+        : minStake;
+      return bounded.toFixed(2);
+    });
+  }, [minStake, maxStake]);
 
   useEffect(() => {
     if (mode !== "real" || !initialRound?.shatterpoint) return;

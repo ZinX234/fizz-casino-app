@@ -7,6 +7,8 @@ const updateSchema = z.object({
   slug: z.enum(['crash', 'towers', 'mines', 'vault-heist', 'donut-division', 'fizz-rush', 'shatterpoint']),
   houseEdgeBps: z.number().int().min(100).max(9900).multipleOf(10),
   bonusBuyMultiplier: z.number().int().min(1).max(100).optional(),
+  minBetCents: z.number().int().min(100).max(10000).optional(),
+  maxBetCents: z.number().int().min(100).max(10000).optional(),
 }).strict()
 
 export async function POST(request: Request) {
@@ -29,11 +31,22 @@ export async function POST(request: Request) {
     if (body.data.slug !== 'donut-division' && body.data.bonusBuyMultiplier !== undefined) {
       return Response.json({ error: 'Bonus buy settings are only available for Donut Division.' }, { status: 400 })
     }
+    if (body.data.slug === 'shatterpoint' && (body.data.minBetCents === undefined || body.data.maxBetCents === undefined)) {
+      return Response.json({ error: 'Shatterpoint requires both minimum and maximum bets.' }, { status: 400 })
+    }
+    if (body.data.slug !== 'shatterpoint' && (body.data.minBetCents !== undefined || body.data.maxBetCents !== undefined)) {
+      return Response.json({ error: 'Minimum and maximum bets are only available for Shatterpoint.' }, { status: 400 })
+    }
+    if (body.data.minBetCents !== undefined && body.data.maxBetCents !== undefined && body.data.minBetCents > body.data.maxBetCents) {
+      return Response.json({ error: 'The minimum bet cannot exceed the maximum bet.' }, { status: 400 })
+    }
     const settings = await updateBuiltInHouseEdge(
       session.user.id,
       body.data.slug,
       body.data.houseEdgeBps,
       body.data.bonusBuyMultiplier,
+      body.data.minBetCents,
+      body.data.maxBetCents,
     )
     return Response.json({ settings })
   } catch (error) {

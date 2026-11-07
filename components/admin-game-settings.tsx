@@ -28,9 +28,26 @@ export function AdminGameSettings({ initialSettings }: { initialSettings: GameRt
     setMessage((current) => current?.slug === 'donut-division' ? null : current)
   }
 
+  function updateShatterpointBetLimits(slug: 'shatterpoint', field: 'minBetCents' | 'maxBetCents', cents: number) {
+    if (!Number.isFinite(cents)) return
+    const bounded = Math.min(10000, Math.max(100, Math.round(cents)))
+    setSettings((current) => current.map((item) => item.slug === slug
+      ? { ...item, [field]: bounded }
+      : item))
+    setMessage((current) => current?.slug === slug ? null : current)
+  }
+
   async function save(slug: GameRtpSetting['slug']) {
     const setting = settings.find((item) => item.slug === slug)
     if (!setting) return
+    if (slug === 'shatterpoint') {
+      const minBetCents = setting.minBetCents ?? 100
+      const maxBetCents = setting.maxBetCents ?? 10000
+      if (minBetCents > maxBetCents) {
+        setMessage({ slug, text: 'The minimum bet cannot exceed the maximum bet.', error: true })
+        return
+      }
+    }
     setSavingSlug(slug)
     setMessage(null)
     try {
@@ -42,20 +59,24 @@ export function AdminGameSettings({ initialSettings }: { initialSettings: GameRt
           slug,
           houseEdgeBps: setting.houseEdgeBps,
           ...(slug === 'donut-division' ? { bonusBuyMultiplier: setting.bonusBuyMultiplier ?? 100 } : {}),
+          ...(slug === 'shatterpoint'
+            ? { minBetCents: setting.minBetCents ?? 100, maxBetCents: setting.maxBetCents ?? 10000 }
+            : {}),
         }),
       })
       const result = await response.json().catch(() => null)
       if (!response.ok) throw new Error(result?.error ?? 'Could not save game settings.')
       const saved = result?.settings as GameRtpSetting | undefined
       if (!saved || saved.slug !== slug || !Number.isInteger(saved.houseEdgeBps) || !Number.isInteger(saved.rtpBps)
-        || (slug === 'donut-division' && !Number.isInteger(saved.bonusBuyMultiplier))) {
+        || (slug === 'donut-division' && !Number.isInteger(saved.bonusBuyMultiplier))
+        || (slug === 'shatterpoint' && (!Number.isInteger(saved.minBetCents) || !Number.isInteger(saved.maxBetCents)))) {
         throw new Error('The server did not confirm the saved odds. Refresh and try again.')
       }
       setSettings((current) => current.map((item) => item.slug === slug ? saved : item))
       setPublishedSettings((current) => current.map((item) => item.slug === slug ? saved : item))
       setMessage({
         slug,
-        text: `Saved for new rounds: ${(saved.houseEdgeBps / 100).toFixed(1)}% house edge · ${(saved.rtpBps / 100).toFixed(1)}% RTP${saved.bonusBuyMultiplier ? ` · Buy Bonus ${saved.bonusBuyMultiplier}×` : ''}.`,
+        text: `Saved for new rounds: ${(saved.houseEdgeBps / 100).toFixed(1)}% house edge · ${(saved.rtpBps / 100).toFixed(1)}% RTP${saved.bonusBuyMultiplier ? ` · Buy Bonus ${saved.bonusBuyMultiplier}×` : ''}${saved.minBetCents !== undefined && saved.maxBetCents !== undefined ? ` · ${(saved.minBetCents / 100).toFixed(2)}–${(saved.maxBetCents / 100).toFixed(2)} FC bets` : ''}.`,
         error: false,
       })
     } catch (error) {
@@ -77,6 +98,9 @@ export function AdminGameSettings({ initialSettings }: { initialSettings: GameRt
           const hasUnsavedChanges = published.houseEdgeBps !== setting.houseEdgeBps
             || (setting.slug === 'donut-division'
               && (published.bonusBuyMultiplier ?? 100) !== (setting.bonusBuyMultiplier ?? 100))
+            || (setting.slug === 'shatterpoint'
+              && ((published.minBetCents ?? 100) !== (setting.minBetCents ?? 100)
+                || (published.maxBetCents ?? 10000) !== (setting.maxBetCents ?? 10000)))
           return (
             <article key={setting.slug} className="rounded-2xl border border-white/[0.07] bg-black/10 p-4 sm:p-5">
               <div className="flex items-center justify-between"><h3 className="text-sm font-bold">{setting.name}</h3><span className="rounded-full border border-white/[0.08] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/45">{setting.slug}</span></div>
@@ -98,6 +122,25 @@ export function AdminGameSettings({ initialSettings }: { initialSettings: GameRt
               </div>
               <input id={`${setting.slug}-edge-slider`} type="range" min="100" max="9900" step="10" value={setting.houseEdgeBps} aria-label={`${setting.name} house edge slider`} aria-valuetext={`${(setting.houseEdgeBps / 100).toFixed(1)}% house edge`} onChange={(event) => updateHouseEdge(setting.slug, Number(event.target.value))} className="mt-4 h-2 w-full cursor-pointer accent-[#f4bc63]" />
               <div className="mt-2 flex justify-between text-[10px] text-white/35"><span>1% edge · 99% RTP</span><span>99% edge · 1% RTP</span></div>
+              {setting.slug === 'shatterpoint' && (
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="shatterpoint-min-bet" className="text-xs text-white/50">Minimum bet</label>
+                    <div className="mt-2 flex items-center rounded-lg border border-white/10 bg-black/20 px-2.5 focus-within:border-amber-200/40">
+                      <input id="shatterpoint-min-bet" type="number" min="1" max="100" step="0.01" value={((setting.minBetCents ?? 100) / 100).toFixed(2)} onChange={(event) => updateShatterpointBetLimits('shatterpoint', 'minBetCents', Math.round(Number.parseFloat(event.target.value) * 100))} aria-label="Shatterpoint minimum bet in FC" className="w-full bg-transparent py-2 text-sm font-bold tabular-nums text-white outline-none" />
+                      <span className="text-xs text-white/40">FC</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="shatterpoint-max-bet" className="text-xs text-white/50">Maximum bet</label>
+                    <div className="mt-2 flex items-center rounded-lg border border-white/10 bg-black/20 px-2.5 focus-within:border-amber-200/40">
+                      <input id="shatterpoint-max-bet" type="number" min="1" max="100" step="0.01" value={((setting.maxBetCents ?? 10000) / 100).toFixed(2)} onChange={(event) => updateShatterpointBetLimits('shatterpoint', 'maxBetCents', Math.round(Number.parseFloat(event.target.value) * 100))} aria-label="Shatterpoint maximum bet in FC" className="w-full bg-transparent py-2 text-sm font-bold tabular-nums text-white outline-none" />
+                      <span className="text-xs text-white/40">FC</span>
+                    </div>
+                  </div>
+                  <p className="col-span-2 text-[10px] leading-4 text-white/35">$100 and below is the casino maximum wager for all games.</p>
+                </div>
+              )}
               {setting.slug === 'donut-division' && (
                 <div className="mt-5">
                   <label htmlFor="donut-division-bonus-buy" className="text-xs text-white/50">Buy Bonus price</label>

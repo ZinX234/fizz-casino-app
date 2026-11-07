@@ -81,6 +81,8 @@ export type GameRtpSetting = {
   houseEdgeBps: number
   rtpBps: number
   bonusBuyMultiplier?: number
+  minBetCents?: number
+  maxBetCents?: number
   difficulty?: string
   betCents?: number
 }
