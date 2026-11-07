@@ -1,0 +1,24 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import Link from "next/link"
+
+export function LiveWalletChip({ initialBalance }: { initialBalance: string | number }) {
+  const [balance, setBalance] = useState(Number(initialBalance) || 0)
+
+  useEffect(() => {
+    const handleWalletSync = (event: Event) => {
+      const detail = (event as CustomEvent<{ balance?: string | number }>).detail
+      const nextBalance = Number(detail?.balance)
+      if (Number.isFinite(nextBalance)) setBalance(nextBalance)
+    }
+    window.addEventListener("fizz:wallet-sync", handleWalletSync)
+    return () => window.removeEventListener("fizz:wallet-sync", handleWalletSync)
+  }, [])
+
+  return (
+    <Link href="/account" aria-label={`Wallet balance: ${balance.toFixed(2)} FC`} className="rounded-lg border border-white/[0.12] bg-[#111217] px-3 py-2 text-xs font-semibold text-white/90">
+      {balance.toFixed(2)} FC
+    </Link>
+  )
+}

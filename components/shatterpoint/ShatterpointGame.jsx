@@ -62,10 +62,32 @@ export default function ShatterpointGame({ embedded = false, initialMode = "real
   }, []);
 
   const syncWallet = (wallet) => {
-    if (!wallet?.balance) return;
+    if (!wallet || wallet.balance === null || wallet.balance === undefined) return;
     const next = Number(wallet.balance);
     if (Number.isFinite(next)) setBalance(next);
+    if (Number.isFinite(next) && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("fizz:wallet-sync", { detail: { balance: next } }));
+    }
   };
+
+  useEffect(() => {
+    if (mode !== "real") return;
+    let active = true;
+    fetch("/api/games/shatterpoint/play", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "resume" }),
+    })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((data) => {
+        if (active && data?.wallet) syncWallet(data.wallet);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [mode]);
 
   const startRound = async (selectedMode = mode) => {
     setError("");
