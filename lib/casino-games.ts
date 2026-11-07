@@ -20,6 +20,16 @@ const MAX_DONUT_BONUS_BUY_MULTIPLIER = 100
 const MAX_SAFE_PICKS = 8
 const CRASH_MAX_MULTIPLIER = 1000
 const MAX_SHATTERPOINT_STAGES = 24
+const MINES_BOARD_SIZE = 25
+const MINES_MIN_COUNT = 1
+const MINES_MAX_COUNT = 24
+
+function minesSafeTileCount(mineCount: number) {
+  if (!Number.isInteger(mineCount) || mineCount < MINES_MIN_COUNT || mineCount > MINES_MAX_COUNT) {
+    throw new CasinoGameError('Choose between 1 and 24 mines.')
+  }
+  return MINES_BOARD_SIZE - mineCount
+}
 
 const gameCatalog: Array<{ slug: CasinoGameSlug; name: string; description: string }> = [
   { slug: 'crash', name: 'Crash', description: 'Cash out before the multiplier crashes. The displayed RTP applies to new rounds.' },
@@ -775,9 +785,7 @@ export async function startCasinoRound(input: {
       ? 'Shatterpoint wager is outside the configured range.'
       : 'Wager must be between $1.00 and $100.00.')
   }
-  if (input.slug === 'mines' && (!Number.isInteger(input.mineCount) || input.mineCount < 1 || input.mineCount > 24)) {
-    throw new CasinoGameError('Choose between 1 and 24 mines.')
-  }
+  if (input.slug === 'mines') minesSafeTileCount(input.mineCount)
   if (input.slug === 'shatterpoint' && input.stageCount !== undefined
     && (!Number.isInteger(input.stageCount) || input.stageCount < 3 || input.stageCount > MAX_SHATTERPOINT_STAGES)) {
     throw new CasinoGameError('Shatterpoint stages must be between 3 and 24.')
@@ -1462,7 +1470,9 @@ export async function playCasinoAction(input: {
       if (input.slug === 'towers' && (input.position! < 0 || input.position! > 2)) throw new CasinoGameError('Choose one of the three columns.')
       if (input.slug === 'mines' && (input.position! < 0 || input.position! > 24)) throw new CasinoGameError('Choose a tile on the board.')
       if (input.slug === 'mines' && picks.includes(input.position!)) throw new CasinoGameError('You already chose that tile.')
-      const maxPicks = input.slug === 'towers' ? MAX_SAFE_PICKS : Math.min(MAX_SAFE_PICKS, 25 - Number(outcome.mineCount))
+      const maxPicks = input.slug === 'towers'
+        ? MAX_SAFE_PICKS
+        : minesSafeTileCount(Number(outcome.mineCount))
       if (picks.length >= maxPicks) throw new CasinoGameError('There are no more picks in this round.', 409)
       const isSafe = input.slug === 'towers'
         ? input.position === numberArray(outcome.safeColumns)[picks.length]

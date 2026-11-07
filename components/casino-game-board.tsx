@@ -210,7 +210,7 @@ function MinesBoard({ round, mineCount, pending, onPick }: { round: GameRoundVie
     const isMine = mines.has(position)
     const isKnownSafe = round?.status === 'settled' && !isMine
     return <button key={position} type="button" aria-label={`Tile ${position + 1}${isMine ? ', mine' : isPicked ? ', revealed safe' : ''}`} disabled={pending || round?.status !== 'active' || isPicked} onClick={() => onPick(position)} className={`aspect-square rounded-xl border text-lg font-black transition disabled:cursor-default ${isMine ? 'border-rose-200/30 bg-rose-200/[0.09] text-rose-200' : isPicked || isKnownSafe ? 'border-emerald-200/25 bg-emerald-200/[0.07] text-emerald-100' : 'border-white/[0.08] bg-white/[0.035] text-white/15 hover:border-amber-100/30 hover:bg-amber-100/[0.05]'}`}>{isMine ? '×' : isPicked || isKnownSafe ? '◆' : '?'}</button>
-  })}</div><p className="mt-4 text-center text-[11px] text-white/35">{round?.status === 'active' ? 'Choose a tile or cash out after a safe pick.' : 'Start a round to reveal tiles.'}</p></div>
+  })}</div><p className="mt-4 text-center text-[11px] text-white/35">{round?.status === 'active' ? 'Reveal every safe tile to win automatically, or cash out after a safe pick. One mine ends the round.' : 'Start a round to reveal tiles.'}</p></div>
 }
 
 function TowersBoard({ round, pending, onPick }: { round: GameRoundView | null; pending: boolean; onPick: (position: number) => void }) {
