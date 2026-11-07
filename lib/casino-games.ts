@@ -18,6 +18,7 @@ const DEFAULT_DONUT_BONUS_BUY_MULTIPLIER = 100
 const MAX_DONUT_BONUS_BUY_MULTIPLIER = 100
 const MAX_SAFE_PICKS = 8
 const CRASH_MAX_MULTIPLIER = 1000
+const MAX_SHATTERPOINT_STAGES = 24
 
 const gameCatalog: Array<{ slug: CasinoGameSlug; name: string; description: string }> = [
   { slug: 'crash', name: 'Crash', description: 'Cash out before the multiplier crashes. The displayed RTP applies to new rounds.' },
@@ -26,6 +27,7 @@ const gameCatalog: Array<{ slug: CasinoGameSlug; name: string; description: stri
   { slug: 'vault-heist', name: 'Vault Heist', description: 'Crack a high-security vault, manage the alarm, and decide when to make your escape.' },
   { slug: 'donut-division', name: 'Donut Division', description: 'Match donut symbols across 25 paylines and choose a bonus investigation when scatters land.' },
   { slug: 'fizz-rush', name: 'Fizz Rush', description: 'An endless tropical runner. Run as far as you can before the island claims you.' },
+  { slug: 'shatterpoint', name: 'FIZZ: Shatterpoint', description: 'Cross the glass bridge, choose safe panes, and cash out before the bridge breaks.' },
 ]
 
 export class CasinoGameError extends Error {
@@ -36,7 +38,7 @@ export class CasinoGameError extends Error {
 }
 
 function isGameSlug(value: string): value is CasinoGameSlug {
-  return value === 'crash' || value === 'towers' || value === 'mines' || value === 'vault-heist' || value === 'donut-division' || value === 'fizz-rush'
+  return value === 'crash' || value === 'towers' || value === 'mines' || value === 'vault-heist' || value === 'donut-division' || value === 'fizz-rush' || value === 'shatterpoint'
 }
 
 function readHouseEdge(configuration: unknown) {
@@ -88,6 +90,12 @@ export async function ensureBuiltInGames() {
      VALUES ('fizz-rush', 'Fizz Rush', 'Fizz Originals', 'other', $1, 'available', true, '{"houseEdgeBps":200}'::jsonb)
      ON CONFLICT (slug) DO NOTHING`,
     [gameCatalog[5].description],
+  )
+  await databasePool.query(
+    `INSERT INTO public.games (slug, name, provider, category, description, status, featured, configuration)
+     VALUES ('shatterpoint', 'FIZZ: Shatterpoint', 'Fizz Originals', 'other', $1, 'available', true, '{"houseEdgeBps":200,"stageCount":12,"stagesMin":3,"stagesMax":24}'::jsonb)
+     ON CONFLICT (slug) DO NOTHING`,
+    [gameCatalog[6].description],
   )
 }
 
@@ -380,6 +388,20 @@ function makeTowerColumns(serverSeed: string, clientSeed: string, sessionId: str
   )
 }
 
+function makeShatterpointArrangement(serverSeed: string, clientSeed: string, sessionId: string, stages: number) {
+  return Array.from({ length: stages }, (_, stage) =>
+    deterministicInteger(serverSeed, `shatterpoint:${clientSeed}:${sessionId}:${stage}`, 2) === 0 ? 'left' : 'right',
+  )
+}
+
+function shatterpointMultiplierForStage(stage: number, rtpBps: number) {
+  if (!Number.isInteger(stage) || stage < 1 || stage > MAX_SHATTERPOINT_STAGES) {
+    throw new CasinoGameError('Shatterpoint stage is invalid.', 400)
+  }
+  const survivalProbability = 0.5 ** stage
+  return Math.floor(((rtpBps / 10_000) / survivalProbability) * 100 + 1e-8) / 100
+}
+
 function makeCrashPoint(serverSeed: string, clientSeed: string, sessionId: string, rtpBps: number) {
   const digest = createHmac('sha256', serverSeed).update(`crash:${clientSeed}:${sessionId}`).digest()
   const unit = digest.readUInt32BE(0) / 0x1_0000_0000
@@ -569,6 +591,38 @@ function roundView(row: Record<string, any>): GameRoundView {
         : {}),
     }
   }
+  if (slug === 'shatterpoint') {
+    const stageCount = Number(outcome.stageCount ?? 12)
+    const currentStage = Number(outcome.currentStage ?? 0)
+    const rtpBps = Number(outcome.rtpBps)
+    const decisions = Array.isArray(outcome.decisions) ? outcome.decisions : []
+    const latestDecision = decisions[decisions.length - 1] as
+      | { stage?: unknown; side?: unknown; safe?: unknown; nextStage?: unknown; multiplier?: unknown }
+      | undefined
+    view.shatterpoint = {
+      stageCount,
+      currentStage,
+      currentMultiplier: Number(outcome.currentMultiplier ?? 1),
+      canCashOut: !settled && currentStage > 0,
+      ladder: Array.from({ length: stageCount }, (_, index) =>
+        shatterpointMultiplierForStage(index + 1, rtpBps),
+      ),
+      configVersion: String(outcome.configVersion ?? ''),
+      ...(latestDecision && typeof latestDecision.stage === 'number' &&
+        (latestDecision.side === 'left' || latestDecision.side === 'right') &&
+        typeof latestDecision.safe === 'boolean'
+        ? {
+            lastStep: {
+              stage: latestDecision.stage,
+              side: latestDecision.side,
+              safe: latestDecision.safe,
+              nextStage: typeof latestDecision.nextStage === 'number' ? latestDecision.nextStage : currentStage,
+              multiplier: typeof latestDecision.multiplier === 'number' ? latestDecision.multiplier : Number(outcome.currentMultiplier ?? 1),
+            },
+          }
+        : {}),
+    }
+  }
   return view
 }
 
@@ -666,6 +720,7 @@ export async function startCasinoRound(input: {
   expectedRtpBps: number
   profileId?: string
   buyBonus?: boolean
+  stageCount?: number
 }): Promise<GameRoundView> {
   if (!isGameSlug(input.slug)) throw new CasinoGameError('Unknown game.', 404)
   if (input.buyBonus && input.slug !== 'donut-division') {
@@ -676,6 +731,10 @@ export async function startCasinoRound(input: {
   }
   if (input.slug === 'mines' && (!Number.isInteger(input.mineCount) || input.mineCount < 1 || input.mineCount > 24)) {
     throw new CasinoGameError('Choose between 1 and 24 mines.')
+  }
+  if (input.slug === 'shatterpoint' && input.stageCount !== undefined
+    && (!Number.isInteger(input.stageCount) || input.stageCount < 3 || input.stageCount > MAX_SHATTERPOINT_STAGES)) {
+    throw new CasinoGameError('Shatterpoint stages must be between 3 and 24.')
   }
 
   await ensureBuiltInGames()
@@ -806,6 +865,16 @@ export async function startCasinoRound(input: {
       )
       outcome.maxCheckpoints = maxCheckpoints
       outcome.lethalCheckpoint = lethalSlot < maxCheckpoints ? lethalSlot : null
+    }
+    if (input.slug === 'shatterpoint') {
+      const stageCount = input.stageCount ?? 12
+      outcome.stageCount = stageCount
+      outcome.currentStage = 0
+      outcome.arrangement = makeShatterpointArrangement(serverSeed, clientSeed, session.id, stageCount)
+      outcome.decisions = []
+      outcome.configVersion = createHash('sha256').update(JSON.stringify(games[0].configuration)).digest('hex')
+      outcome.currentMultiplier = 1
+      outcome.canCashOut = false
     }
 
     await client.query(
@@ -1036,9 +1105,122 @@ export async function playCasinoAction(input: {
   position?: number
   choiceId?: string
   requestId?: string
+  side?: 'left' | 'right'
+  stage?: number
 }): Promise<GameRoundView> {
   return withTransaction(async (client) => {
     const row = await loadRound(client, input.userId, input.slug, input.sessionId)
+    if (input.slug === 'shatterpoint') {
+      const outcome = parseOutcome(row.outcome)
+      const startedAtMs = new Date(row.started_at).getTime()
+      if (!Number.isFinite(startedAtMs) || Date.now() - startedAtMs > 24 * 60 * 60 * 1000) {
+        await settleRound(client, row, input.userId, outcome, '0.00', 'loss')
+        throw new CasinoGameError('This Shatterpoint round has expired.', 409)
+      }
+      if (input.requestId) {
+        const decisions = Array.isArray(outcome.decisions) ? outcome.decisions : []
+        if (input.action === 'pick') {
+          const original = decisions.find((decision) =>
+            typeof decision === 'object' && decision !== null &&
+            String((decision as Record<string, unknown>).requestId ?? '') === input.requestId,
+          ) as Record<string, unknown> | undefined
+          const view = roundView(row)
+          if (original && view.shatterpoint) {
+            view.shatterpoint.lastStep = {
+              stage: Number(original.stage ?? outcome.currentStage ?? 0),
+              side: original.side === 'right' ? 'right' : 'left',
+              safe: original.safe === true,
+              nextStage: Number(original.nextStage ?? outcome.currentStage ?? 0),
+              multiplier: Number(original.multiplier ?? outcome.currentMultiplier ?? 1),
+            }
+            return view
+          }
+        }
+        if (input.action === 'cashout' && outcome.lastCashoutRequestId === input.requestId) {
+          return roundView(row)
+        }
+      }
+      if (row.bet_status !== 'pending' || row.session_status !== 'active') {
+        throw new CasinoGameError('This round is already finished.', 409)
+      }
+      if (input.action === 'cashout') {
+        const completedStages = Number(outcome.currentStage ?? 0)
+        if (completedStages < 1) throw new CasinoGameError('Clear at least one stage before cashing out.')
+        const multiplier = shatterpointMultiplierForStage(completedStages, Number(outcome.rtpBps))
+        const payoutCents = Math.floor(Number(row.wager_amount) * multiplier * 100 + 1e-8)
+        outcome.cashoutMultiplier = multiplier
+        outcome.currentMultiplier = multiplier
+        outcome.canCashOut = false
+        if (input.requestId) outcome.lastCashoutRequestId = input.requestId
+        await settleRound(client, row, input.userId, outcome, (payoutCents / 100).toFixed(2), 'win')
+        return roundView({
+          ...row,
+          bet_status: 'settled',
+          session_status: 'completed',
+          payout_amount: (payoutCents / 100).toFixed(2),
+          outcome,
+        })
+      }
+      if (input.action !== 'pick' || !input.side || !Number.isInteger(input.stage)) {
+        throw new CasinoGameError('Choose a valid Shatterpoint pane.')
+      }
+      const stageCount = Number(outcome.stageCount ?? 12)
+      const currentStage = Number(outcome.currentStage ?? 0)
+      if (input.stage !== currentStage) throw new CasinoGameError('The round is waiting for a different stage.', 409)
+      if (currentStage >= stageCount) throw new CasinoGameError('There are no more stages in this round.', 409)
+      const arrangement = Array.isArray(outcome.arrangement) ? outcome.arrangement : []
+      if (arrangement.length !== stageCount) throw new CasinoGameError('The committed Shatterpoint arrangement is unavailable.', 500)
+      const safe = arrangement[currentStage] === input.side
+      const decisions = Array.isArray(outcome.decisions) ? outcome.decisions : []
+      outcome.decisions = decisions
+      outcome.lastStepRequestId = input.requestId ?? null
+      if (!safe) {
+        outcome.canCashOut = false
+        decisions.push({
+          stage: currentStage,
+          side: input.side,
+          safe: false,
+          nextStage: currentStage,
+          multiplier: 0,
+          requestId: input.requestId ?? null,
+        })
+        await settleRound(client, row, input.userId, outcome, '0.00', 'loss')
+        return roundView({
+          ...row,
+          bet_status: 'settled',
+          session_status: 'completed',
+          payout_amount: '0.00',
+          outcome,
+        })
+      }
+      const nextStage = currentStage + 1
+      const multiplier = shatterpointMultiplierForStage(nextStage, Number(outcome.rtpBps))
+      decisions.push({
+        stage: currentStage,
+        side: input.side,
+        safe: true,
+        nextStage,
+        multiplier,
+        requestId: input.requestId ?? null,
+      })
+      outcome.currentStage = nextStage
+      outcome.currentMultiplier = multiplier
+      outcome.canCashOut = nextStage > 0 && nextStage < stageCount
+      if (nextStage >= stageCount) {
+        const payoutCents = Math.floor(Number(row.wager_amount) * multiplier * 100 + 1e-8)
+        outcome.cashoutMultiplier = multiplier
+        await settleRound(client, row, input.userId, outcome, (payoutCents / 100).toFixed(2), 'win')
+      } else {
+        await client.query(`UPDATE public.game_results SET outcome = $2::jsonb WHERE bet_id = $1::uuid`, [row.bet_id, JSON.stringify(outcome)])
+      }
+      return roundView({
+        ...row,
+        bet_status: nextStage >= stageCount ? 'settled' : 'pending',
+        session_status: nextStage >= stageCount ? 'completed' : 'active',
+        payout_amount: nextStage >= stageCount ? String(outcome.payoutAmount ?? '0.00') : '0.00',
+        outcome,
+      })
+    }
     if (input.slug === 'fizz-rush') {
       if (input.action !== 'cashout') throw new CasinoGameError('Fizz Rush only accepts the settle (cashout) action.')
       if (row.bet_status !== 'pending' || row.session_status !== 'active') throw new CasinoGameError('This round is already finished.', 409)

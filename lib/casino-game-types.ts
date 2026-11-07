@@ -1,6 +1,6 @@
 import type { VaultHeistOutcome } from '@/lib/vault-heist-config'
 
-export type CasinoGameSlug = 'crash' | 'towers' | 'mines' | 'vault-heist' | 'donut-division' | 'fizz-rush'
+export type CasinoGameSlug = 'crash' | 'towers' | 'mines' | 'vault-heist' | 'donut-division' | 'fizz-rush' | 'shatterpoint'
 
 export type GameRoundView = {
   sessionId: string
@@ -57,6 +57,21 @@ export type GameRoundView = {
     wagerCents: number
     mode: string
     betCents: number
+  }
+  shatterpoint?: {
+    stageCount: number
+    currentStage: number
+    currentMultiplier: number
+    canCashOut: boolean
+    ladder: number[]
+    configVersion: string
+    lastStep?: {
+      stage: number
+      side: 'left' | 'right'
+      safe: boolean
+      nextStage: number
+      multiplier: number
+    }
   },
 }
 
