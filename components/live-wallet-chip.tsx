@@ -18,7 +18,23 @@ export function LiveWalletChip({ initialBalance }: { initialBalance: string | nu
       if (Number.isFinite(nextBalance)) setBalance(nextBalance)
     }
     window.addEventListener("fizz:wallet-sync", handleWalletSync)
-    return () => window.removeEventListener("fizz:wallet-sync", handleWalletSync)
+    let active = true
+    const refresh = async () => {
+      try {
+        const response = await fetch(`/api/account/wallet?ts=${Date.now()}`, { cache: "no-store", credentials: "same-origin" })
+        if (!response.ok) return
+        const data = await response.json()
+        const nextBalance = Number(data?.wallet?.balance)
+        if (active && Number.isFinite(nextBalance) && nextBalance >= 0) setBalance(nextBalance)
+      } catch {}
+    }
+    refresh()
+    const interval = window.setInterval(refresh, 5000)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+      window.removeEventListener("fizz:wallet-sync", handleWalletSync)
+    }
   }, [])
 
   return (

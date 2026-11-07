@@ -225,7 +225,10 @@ export default function ShatterpointGame({ embedded = false, initialMode = "real
       } else {
         await sceneRef.current.breakPanel(step.stage, side, {});
         setResult({ status: "loss", payout: 0 });
-        if (mode === "real") setSessionId(null);
+        if (mode === "real") {
+          await refreshWallet();
+          setSessionId(null);
+        }
         track("shatterpoint_round_complete", { mode, result: "loss", stage });
         setPhase("results");
       }
@@ -234,7 +237,7 @@ export default function ShatterpointGame({ embedded = false, initialMode = "real
     } finally {
       setLocked(false);
     }
-  }, [locked, mode, phase, sessionId, stage, stageCount, stake]);
+  }, [locked, mode, phase, sessionId, stage, stageCount, stake, refreshWallet]);
 
   const cashOut = async () => {
     if (locked || phase !== "game" || stage < 1) return;
