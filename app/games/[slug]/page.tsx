@@ -64,9 +64,10 @@ export default async function GamePage({
   }
 
   if (rawSlug === 'shatterpoint') {
-    const [settings, wallet] = await Promise.all([
+    const [settings, wallet, initialRound] = await Promise.all([
       getBuiltInRtpSetting(rawSlug),
       getWalletSnapshot(session.user.id),
+      getActiveCasinoRound(session.user.id, rawSlug),
     ])
     if (!settings) notFound()
     const initialMode = query.mode === 'demo' ? 'demo' : 'real'
@@ -92,6 +93,7 @@ export default async function GamePage({
             initialMode={initialMode}
             initialBalance={Number(wallet.balance ?? 0)}
             setting={settings}
+            initialRound={initialRound}
           />
         </div>
       </main>

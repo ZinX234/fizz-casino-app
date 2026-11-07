@@ -6,7 +6,7 @@ import GameCanvas from "@/components/shatterpoint/GameCanvas";
 
 const DEFAULT_STAGE_COUNT = 12;
 
-export default function ShatterpointGame({ embedded = false, initialMode = "real", initialBalance = 0, setting }) {
+export default function ShatterpointGame({ embedded = false, initialMode = "real", initialBalance = 0, setting, initialRound }) {
   const [mode, setMode] = useState(initialMode === "demo" ? "demo" : "real");
   const [phase, setPhase] = useState("menu");
   const [sessionId, setSessionId] = useState(null);
@@ -24,6 +24,22 @@ export default function ShatterpointGame({ embedded = false, initialMode = "real
 
   const minStake = 1;
   const maxStake = 100;
+
+  useEffect(() => {
+    if (mode !== "real" || !initialRound?.shatterpoint) return;
+    setSessionId(initialRound.sessionId);
+    setStage(initialRound.shatterpoint.currentStage ?? 0);
+    setStageCount(initialRound.shatterpoint.stageCount ?? DEFAULT_STAGE_COUNT);
+    setLadder(initialRound.shatterpoint.ladder ?? []);
+    if (initialRound.status === "active") {
+      setPhase("game");
+    }
+  }, [initialRound, mode]);
+
+  useEffect(() => {
+    if (!sceneReady || mode !== "real" || initialRound?.status !== "active" || !initialRound?.shatterpoint) return;
+    sceneRef.current?.startRun({ stages: initialRound.shatterpoint.stageCount ?? DEFAULT_STAGE_COUNT });
+  }, [sceneReady, initialRound, mode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -143,6 +159,7 @@ export default function ShatterpointGame({ embedded = false, initialMode = "real
             setResult({ status: "win", payout: Number(stake) });
           } else {
             setResult({ status: step.settlement.result === "win" ? "win" : "active", payout: Number(step.settlement.payout) || 0 });
+            setSessionId(null);
           }
           await sceneRef.current.playVictory?.();
           track("shatterpoint_round_complete", { mode, result: "win", stage: nextStage });
@@ -151,6 +168,7 @@ export default function ShatterpointGame({ embedded = false, initialMode = "real
       } else {
         await sceneRef.current.breakPanel(step.stage, side, {});
         setResult({ status: "loss", payout: 0 });
+        if (mode === "real") setSessionId(null);
         track("shatterpoint_round_complete", { mode, result: "loss", stage });
         setPhase("results");
       }
@@ -181,6 +199,7 @@ export default function ShatterpointGame({ embedded = false, initialMode = "real
       if (!response.ok) throw new Error(data.error || "Cash out failed.");
       syncWallet(data.wallet);
       setResult({ status: "cashout", payout: Number(data.round.payout) || 0 });
+      setSessionId(null);
       setPhase("results");
       track("shatterpoint_round_complete", { mode: "real", result: "cashout", stage });
     } catch (caught) {

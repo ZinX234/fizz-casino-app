@@ -752,6 +752,43 @@ export async function startCasinoRound(input: {
     )
     if (existing[0]) return roundView(await loadRound(client, input.userId, input.slug, existing[0].session_id))
 
+    if (input.slug === 'shatterpoint') {
+      // Repair a round-record mismatch without allowing a new wager while an
+      // actually active Shatterpoint round is still pending.
+      await client.query(
+        `UPDATE public.game_sessions gs
+         SET status = 'completed', ended_at = COALESCE(gs.ended_at, now())
+         FROM public.bets b, public.games g
+         WHERE gs.id = b.game_session_id
+           AND gs.game_id = g.id
+           AND gs.user_id = $1::uuid
+           AND g.slug = 'shatterpoint'
+           AND gs.status = 'active'
+           AND b.status = 'settled'`,
+        [input.userId],
+      )
+
+      const { rows: expired } = await client.query<{ session_id: string }>(
+        `SELECT gs.id::text AS session_id
+         FROM public.game_sessions gs
+         JOIN public.games g ON g.id = gs.game_id
+         JOIN public.bets b ON b.game_session_id = gs.id
+         WHERE gs.user_id = $1::uuid
+           AND g.slug = 'shatterpoint'
+           AND gs.status = 'active'
+           AND b.status = 'pending'
+           AND gs.started_at <= now() - interval '24 hours'`,
+        [input.userId],
+      )
+      for (const expiredRound of expired) {
+        const expiredRow = await loadRound(client, input.userId, input.slug, expiredRound.session_id)
+        const expiredOutcome = parseOutcome(expiredRow.outcome)
+        expiredOutcome.canCashOut = false
+        expiredOutcome.expired = true
+        await settleRound(client, expiredRow, input.userId, expiredOutcome, '0.00', 'loss')
+      }
+    }
+
     const { rows: active } = await client.query(
       `SELECT gs.id FROM public.game_sessions gs
        JOIN public.games g ON g.id = gs.game_id
