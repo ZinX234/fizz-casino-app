@@ -1530,12 +1530,13 @@ export async function forfeitActiveShatterpointRound(userId: string): Promise<bo
          AND gs.status = 'active'
          AND b.status = 'pending'
        ORDER BY gs.started_at DESC
-       LIMIT 1
-       FOR UPDATE OF gs, b`,
+       LIMIT 1`,
       [userId],
     )
     if (!rows[0]) return false
-    const row = await loadRound(client, userId, 'shatterpoint', rows[0].session_id, false)
+
+    const row = await loadRound(client, userId, 'shatterpoint', rows[0].session_id, true)
+    if (row.bet_status !== 'pending' || row.session_status !== 'active') return false
     const outcome = parseOutcome(row.outcome)
     outcome.canCashOut = false
     outcome.forfeit = true
