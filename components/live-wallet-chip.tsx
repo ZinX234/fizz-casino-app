@@ -7,6 +7,10 @@ export function LiveWalletChip({ initialBalance }: { initialBalance: string | nu
   const [balance, setBalance] = useState(Number(initialBalance) || 0)
 
   useEffect(() => {
+    setBalance(Number(initialBalance) || 0)
+  }, [initialBalance])
+
+  useEffect(() => {
     const handleWalletSync = (event: Event) => {
       const detail = (event as CustomEvent<{ balance?: string | number }>).detail
       const nextBalance = Number(detail?.balance)

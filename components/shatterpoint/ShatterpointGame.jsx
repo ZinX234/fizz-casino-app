@@ -61,33 +61,46 @@ export default function ShatterpointGame({ embedded = false, initialMode = "real
     return () => window.dispatchEvent(new CustomEvent("fizz:game-exit", { detail: { slug: "shatterpoint" } }));
   }, []);
 
-  const syncWallet = (wallet) => {
+  const syncWallet = useCallback((wallet) => {
     if (!wallet || wallet.balance === null || wallet.balance === undefined) return;
     const next = Number(wallet.balance);
-    if (Number.isFinite(next)) setBalance(next);
-    if (Number.isFinite(next) && typeof window !== "undefined") {
+    if (!Number.isFinite(next) || next < 0) return;
+    setBalance(next);
+    if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("fizz:wallet-sync", { detail: { balance: next } }));
     }
-  };
+  }, []);
+
+  const refreshWallet = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/account/wallet?ts=${Date.now()}`, {
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: { "x-requested-with": "XMLHttpRequest" },
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data?.wallet) syncWallet(data.wallet);
+      return data?.wallet ? Number(data.wallet.balance) : null;
+    } catch {
+      // Keep the last successfully read wallet value rather than guessing.
+      return null;
+    }
+  }, [syncWallet]);
 
   useEffect(() => {
     if (mode !== "real") return;
-    let active = true;
-    fetch("/api/games/shatterpoint/play", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "resume" }),
-    })
-      .then(async (response) => {
-        if (!response.ok) return null;
-        return response.json();
-      })
-      .then((data) => {
-        if (active && data?.wallet) syncWallet(data.wallet);
-      })
-      .catch(() => {});
-    return () => { active = false; };
-  }, [mode]);
+    refreshWallet();
+    const interval = window.setInterval(refreshWallet, 5000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refreshWallet();
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [mode, refreshWallet]);
 
   const startRound = async (selectedMode = mode) => {
     setError("");
@@ -114,6 +127,10 @@ export default function ShatterpointGame({ embedded = false, initialMode = "real
     setLocked(true);
     const requestId = crypto.randomUUID();
     try {
+      const authoritativeBalance = await refreshWallet();
+      if (authoritativeBalance !== null && stakeNumber > authoritativeBalance) {
+        throw new Error(`Insufficient balance. You have ${authoritativeBalance.toFixed(2)} FC available.`);
+      }
       const response = await fetch("/api/games/shatterpoint/play", {
         method: "POST",
         headers: { "content-type": "application/json" },
