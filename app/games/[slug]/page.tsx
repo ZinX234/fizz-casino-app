@@ -10,6 +10,7 @@ import { getPlayerUsername } from '@/lib/player-profile'
 import ShatterpointGame from '@/components/shatterpoint/ShatterpointGame'
 import Link from 'next/link'
 import { LiveWalletChip } from '@/components/live-wallet-chip'
+import ShatterpointLobbyExit from '@/components/shatterpoint/ShatterpointLobbyExit'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Play | Fizz Casino', description: 'Play Fizz original casino games with published return-to-player settings.' }
@@ -75,10 +76,7 @@ export default async function GamePage({
     return (
       <main className="h-svh overflow-hidden bg-[#090a0d] text-white">
         <header className="flex h-[72px] items-center justify-between border-b border-white/[0.08] bg-[#090a0d] px-4 sm:px-6">
-          <Link href="/casino" className="flex items-center gap-3 text-sm font-bold text-white">
-            <img src="/fizz-casino-logo.png" alt="Fizz Casino" className="h-12 w-12 object-contain" />
-            <span className="hidden sm:inline">Lobby</span>
-          </Link>
+          <ShatterpointLobbyExit />
           <div className="flex items-center gap-2">
             <LiveWalletChip initialBalance={wallet.balance ?? 0} />
             <Link href="/account" className="rounded-lg bg-[#6b19f5] px-3.5 py-2 text-xs font-bold text-white">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { track } from "@vercel/analytics";
 import GameCanvas from "@/components/shatterpoint/GameCanvas";
 import { formatFizzcoins } from "@/lib/format-money";
@@ -8,6 +9,7 @@ import { formatFizzcoins } from "@/lib/format-money";
 const DEFAULT_STAGE_COUNT = 12;
 
 export default function ShatterpointGame({ embedded = false, initialMode = "real", initialBalance = 0, setting, initialRound }) {
+  const router = useRouter();
   const [mode, setMode] = useState(initialMode === "demo" ? "demo" : "real");
   const [phase, setPhase] = useState("menu");
   const [sessionId, setSessionId] = useState(null);
@@ -294,16 +296,13 @@ export default function ShatterpointGame({ embedded = false, initialMode = "real
 
   const exit = async () => {
     await forfeitRound();
-    sceneRef.current?.enterMenu?.(stageCount);
-    setPhase("menu");
-    setSessionId(null);
-    setStage(0);
-    setResult(null);
+    router.replace("/casino");
   };
 
   useEffect(() => {
-    if (mode !== "real" || !sessionId) return undefined;
+    if (mode !== "real") return undefined;
     const handlePageHide = () => {
+      if (!sessionId) return;
       const roundToForfeit = sessionId;
       const body = new Blob([JSON.stringify({
         action: "forfeit",
@@ -312,12 +311,41 @@ export default function ShatterpointGame({ embedded = false, initialMode = "real
       })], { type: "application/json" });
       navigator.sendBeacon("/api/games/shatterpoint/play", body);
     };
-    const handleLeave = () => handlePageHide();
+    const handleLeave = async () => {
+      await forfeitRound();
+      router.replace("/casino");
+    };
     window.addEventListener("pagehide", handlePageHide);
     window.addEventListener("fizz:shatterpoint-leave", handleLeave);
     return () => {
       window.removeEventListener("pagehide", handlePageHide);
       window.removeEventListener("fizz:shatterpoint-leave", handleLeave);
+    };
+  }, [mode, sessionId, forfeitRound, router]);
+
+  useEffect(() => {
+    if (mode !== "real") return undefined;
+
+    const guardedUrl = window.location.href;
+    window.history.replaceState({ ...window.history.state, shatterpointGuard: true }, "", guardedUrl);
+    window.history.pushState({ ...window.history.state, shatterpointGuard: true }, "", guardedUrl);
+
+    const handlePopState = () => {
+      window.history.pushState({ shatterpointGuard: true }, "", guardedUrl);
+      setError("Use the Exit game control inside Shatterpoint to leave.");
+    };
+    window.addEventListener("popstate", handlePopState);
+
+    const handleBeforeUnload = (event) => {
+      if (!sessionId) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, [mode, sessionId]);
 
