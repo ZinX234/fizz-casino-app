@@ -78,6 +78,29 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .form-input::placeholder { color: rgb(255 255 255 / 32%); }
 .form-input option { background: #15171c; color: white; }
 
+.blackjack-card-deal {
+  transform-origin: 50% 50%;
+  animation: blackjack-card-deal 620ms cubic-bezier(.18,.72,.24,1) both;
+  animation-delay: var(--blackjack-deal-delay, 0ms);
+  backface-visibility: hidden;
+}
+
+.blackjack-card-reveal {
+  animation: blackjack-card-flip 460ms cubic-bezier(.2,.72,.24,1) both;
+}
+
+@keyframes blackjack-card-deal {
+  0% { opacity: 0; transform: perspective(700px) translate3d(-66px, 94px, 0) rotateY(150deg) rotateZ(-14deg) scale(.72); filter: brightness(1.35) blur(2px); }
+  62% { opacity: 1; transform: perspective(700px) translate3d(5px, -5px, 0) rotateY(-12deg) rotateZ(2deg) scale(1.04); filter: brightness(1.08) blur(0); }
+  100% { opacity: 1; transform: perspective(700px) translate3d(0, 0, 0) rotateY(0) rotateZ(0) scale(1); filter: brightness(1) blur(0); }
+}
+
+@keyframes blackjack-card-flip {
+  0% { transform: perspective(700px) rotateY(180deg); filter: brightness(.7); }
+  65% { transform: perspective(700px) rotateY(-12deg); filter: brightness(1.1); }
+  100% { transform: perspective(700px) rotateY(0); filter: brightness(1); }
+}
+
 .mine-tile-image {
   width: 68%;
   height: 68%;

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Check, CircleHelp, ShieldCheck, TriangleAlert } from 'lucide-react'
+import type { CSSProperties } from 'react'
 import type { BlackjackCard, GameRoundView, GameRtpSetting } from '@/lib/casino-game-types'
 import { formatFizzcoins } from '@/lib/format-money'
 
@@ -16,13 +17,15 @@ type Props = {
 
 const suitSymbols: Record<string, string> = { clubs: '♣', diamonds: '♦', hearts: '♥', spades: '♠' }
 
-function PlayingCard({ card, hidden = false }: { card?: BlackjackCard; hidden?: boolean }) {
+function PlayingCard({ card, hidden = false, reveal = false, side, index }: { card?: BlackjackCard; hidden?: boolean; reveal?: boolean; side: 'player' | 'dealer'; index: number }) {
+  const dealDelay = index > 1 ? 0 : (index * 2 + (side === 'dealer' ? 1 : 0)) * 140
+  const dealStyle = { '--blackjack-deal-delay': `${dealDelay}ms` } as CSSProperties
   if (hidden || !card) {
-    return <div aria-label="Face-down card" className="flex aspect-[0.7] w-[68px] items-center justify-center rounded-lg border border-white/20 bg-[repeating-linear-gradient(45deg,#262b39,#262b39_5px,#1c202b_5px,#1c202b_10px)] shadow-lg sm:w-[82px]"><span className="flex size-8 items-center justify-center rounded-full border border-amber-100/35 text-xs font-black text-amber-100/70">F</span></div>
+    return <div style={dealStyle} aria-label="Face-down card" className="blackjack-card-deal relative flex aspect-[0.7] w-[68px] items-center justify-center overflow-hidden rounded-lg border border-white/20 bg-[repeating-linear-gradient(45deg,#262b39,#262b39_5px,#1c202b_5px,#1c202b_10px)] shadow-lg sm:w-[82px]"><img src="/fizzlogo.png" alt="" className="w-[72%] object-contain opacity-75" /></div>
   }
   const red = card.suit === 'hearts' || card.suit === 'diamonds'
   return (
-    <div aria-label={`${card.rank} of ${card.suit}`} className={`relative flex aspect-[0.7] w-[68px] flex-col justify-between rounded-lg border border-black/10 bg-[#f7f4ed] p-1.5 shadow-lg sm:w-[82px] sm:p-2 ${red ? 'text-[#c14447]' : 'text-[#20252e]'}`}>
+    <div style={dealStyle} aria-label={`${card.rank} of ${card.suit}`} className={`blackjack-card-deal relative flex aspect-[0.7] w-[68px] flex-col justify-between rounded-lg border border-black/10 bg-[#f7f4ed] p-1.5 shadow-lg sm:w-[82px] sm:p-2 ${reveal ? 'blackjack-card-reveal' : ''} ${red ? 'text-[#c14447]' : 'text-[#20252e]'}`}>
       <span className="text-sm font-bold leading-none sm:text-base">{card.rank}<span className="block text-xs">{suitSymbols[card.suit]}</span></span>
       <span aria-hidden="true" className="absolute inset-0 flex items-center justify-center text-3xl opacity-75 sm:text-4xl">{suitSymbols[card.suit]}</span>
       <span aria-hidden="true" className="rotate-180 self-end text-sm font-bold leading-none sm:text-base">{card.rank}<span className="block text-xs">{suitSymbols[card.suit]}</span></span>
@@ -107,18 +110,19 @@ export function BlackjackGame({ setting, initialRound, initialBalance, currency,
           <section aria-label="Blackjack table" className="rounded-[24px] border border-white/[0.08] bg-[#12151a] p-3 sm:p-5">
             <div className="relative flex min-h-[440px] flex-col overflow-hidden rounded-[20px] border border-[#d6b674]/20 bg-[radial-gradient(ellipse_at_50%_42%,#20634d_0%,#124632_48%,#0d3027_100%)] px-4 py-7 shadow-inner sm:min-h-[500px] sm:px-8">
               <div aria-hidden="true" className="pointer-events-none absolute inset-3 rounded-[44%] border border-[#d6b674]/15 sm:inset-5" />
-              <div className="relative flex flex-1 flex-col items-center justify-center gap-3">
+              <img src="/fizzlogo.png" alt="" aria-hidden="true" className="pointer-events-none absolute left-1/2 top-1/2 w-48 -translate-x-1/2 -translate-y-1/2 object-contain opacity-[0.09] sm:w-64" />
+              <div className="relative z-10 flex flex-1 flex-col items-center justify-center gap-3">
                 <div className="text-center">
                   <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/55">Dealer{hand?.dealerTotal !== null && hand?.dealerTotal !== undefined ? ` · ${hand.dealerTotal}` : ''}</p>
                   <div className="mt-3 flex min-h-[100px] items-center justify-center">
-                    {hand ? <div className="flex -space-x-4 sm:-space-x-5">{hand.dealerCards.map((card, index) => <PlayingCard key={`${card.rank}-${card.suit}-${index}`} card={card} />)}{active && <PlayingCard hidden />}</div> : <p className="text-sm text-white/45">The table is ready when you are.</p>}
+                    {hand ? <div className="flex -space-x-4 sm:-space-x-5">{hand.dealerCards.map((card, index) => <PlayingCard key={`${round!.sessionId}-dealer-${index}`} side="dealer" index={index} card={card} reveal={!active && index === 1} />)}{active && <PlayingCard key={`${round!.sessionId}-dealer-1`} side="dealer" index={1} hidden />}</div> : <p className="text-sm text-white/45">The table is ready when you are.</p>}
                   </div>
                 </div>
                 <div className="my-2 flex items-center gap-3 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/35"><span className="h-px w-8 bg-white/15" />Dealer stands on 17<span className="h-px w-8 bg-white/15" /></div>
                 <div className="text-center">
                   <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/55">Your hand{hand ? ` · ${hand.playerTotal}` : ''}</p>
                   <div className="mt-3 flex min-h-[100px] items-center justify-center">
-                    {hand ? <div className="flex -space-x-4 sm:-space-x-5">{hand.playerCards.map((card, index) => <PlayingCard key={`${card.rank}-${card.suit}-${index}`} card={card} />)}</div> : <div className="flex h-[100px] items-center text-5xl font-light text-white/15">21</div>}
+                    {hand ? <div className="flex -space-x-4 sm:-space-x-5">{hand.playerCards.map((card, index) => <PlayingCard key={`${round!.sessionId}-player-${index}`} side="player" index={index} card={card} />)}</div> : <div className="flex h-[100px] items-center text-5xl font-light text-white/15">21</div>}
                   </div>
                   {active && hand?.nextHitBustProbabilityBps !== undefined && <p className="mt-2 text-[10px] font-medium text-white/55">Next hit bust chance <span className="font-bold text-amber-100">{(hand.nextHitBustProbabilityBps / 100).toFixed(2)}%</span></p>}
                 </div>
