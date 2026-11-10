@@ -3,7 +3,7 @@ import 'server-only'
 import { createHash, createHmac, randomBytes } from 'node:crypto'
 import type { PoolClient } from 'pg'
 import { databasePool, withTransaction } from '@/lib/db'
-import type { CasinoGameSlug, GameRoundView, GameRtpSetting } from '@/lib/casino-game-types'
+import type { BlackjackCard, CasinoGameSlug, GameRoundView, GameRtpSetting } from '@/lib/casino-game-types'
 import { xpForFizzcoinWager } from '@/lib/progression'
 import { crashMultiplierAtElapsed } from '@/lib/crash-math'
 import { payoutMultiplierForSafePicks } from '@/lib/casino-payout-math'
@@ -35,6 +35,7 @@ const gameCatalog: Array<{ slug: CasinoGameSlug; name: string; description: stri
   { slug: 'crash', name: 'Crash', description: 'Cash out before the multiplier crashes. The displayed RTP applies to new rounds.' },
   { slug: 'towers', name: 'Towers', description: 'Climb eight rows, choosing a safe column on each step.' },
   { slug: 'mines', name: 'Mines', description: 'Choose the mine count, reveal safe tiles, and cash out whenever you want.' },
+  { slug: 'blackjack', name: 'Blackjack', description: 'A classic blackjack table. Beat the dealer without going over 21.' },
   { slug: 'vault-heist', name: 'Vault Heist', description: 'Crack a high-security vault, manage the alarm, and decide when to make your escape.' },
   { slug: 'donut-division', name: 'Donut Division', description: 'Match donut symbols across 25 paylines and choose a bonus investigation when scatters land.' },
   { slug: 'fizz-rush', name: 'Fizz Rush', description: 'An endless tropical runner. Run as far as you can before the island claims you.' },
@@ -49,7 +50,7 @@ export class CasinoGameError extends Error {
 }
 
 function isGameSlug(value: string): value is CasinoGameSlug {
-  return value === 'crash' || value === 'towers' || value === 'mines' || value === 'vault-heist' || value === 'donut-division' || value === 'fizz-rush' || value === 'shatterpoint'
+  return value === 'crash' || value === 'towers' || value === 'mines' || value === 'blackjack' || value === 'vault-heist' || value === 'donut-division' || value === 'fizz-rush' || value === 'shatterpoint'
 }
 
 function readHouseEdge(configuration: unknown) {
@@ -122,13 +123,26 @@ export async function ensureBuiltInGames() {
      ON CONFLICT (slug) DO NOTHING`,
     [gameCatalog[6].description],
   )
+  await databasePool.query(
+    `INSERT INTO public.games (slug, name, provider, category, description, cover_image_url, status, featured, configuration)
+     VALUES ('blackjack', 'Blackjack', 'Fizz Originals', 'blackjack', $1, '/games/fizzblackjack.png', 'available', true, '{"houseEdgeBps":200}'::jsonb)
+     ON CONFLICT (slug) DO UPDATE SET
+       name = EXCLUDED.name,
+       provider = EXCLUDED.provider,
+       category = EXCLUDED.category,
+       description = EXCLUDED.description,
+       cover_image_url = EXCLUDED.cover_image_url,
+       status = 'available',
+       featured = true`,
+    [gameCatalog[7].description],
+  )
 }
 
 export async function getBuiltInRtpSettings(): Promise<GameRtpSetting[]> {
   await ensureBuiltInGames()
   const { rows } = await databasePool.query<{ slug: CasinoGameSlug; name: string; configuration: unknown }>(
     `SELECT slug, name, configuration FROM public.games WHERE slug = ANY($1::text[])
-     ORDER BY CASE slug WHEN 'crash' THEN 1 WHEN 'towers' THEN 2 WHEN 'mines' THEN 3 WHEN 'vault-heist' THEN 4 WHEN 'donut-division' THEN 5 ELSE 6 END`,
+     ORDER BY CASE slug WHEN 'crash' THEN 1 WHEN 'towers' THEN 2 WHEN 'mines' THEN 3 WHEN 'blackjack' THEN 4 WHEN 'vault-heist' THEN 5 WHEN 'donut-division' THEN 6 ELSE 7 END`,
     [gameCatalog.map((game) => game.slug)],
   )
   return rows.filter((row) => isGameSlug(row.slug)).map((row) => {
@@ -441,6 +455,99 @@ function makeTowerColumns(serverSeed: string, clientSeed: string, sessionId: str
   )
 }
 
+const blackjackSuits = ['clubs', 'diamonds', 'hearts', 'spades']
+const blackjackRanks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
+
+function makeBlackjackDeck(serverSeed: string, clientSeed: string, sessionId: string): BlackjackCard[] {
+  const deck = blackjackSuits.flatMap((suit) => blackjackRanks.map((rank) => ({ rank, suit })))
+  for (let index = deck.length - 1; index > 0; index--) {
+    const swapIndex = deterministicInteger(serverSeed, `blackjack:${clientSeed}:${sessionId}:shuffle:${index}`, index + 1)
+    ;[deck[index], deck[swapIndex]] = [deck[swapIndex], deck[index]]
+  }
+  return deck
+}
+
+function blackjackTotal(cards: BlackjackCard[]) {
+  let total = 0
+  let aces = 0
+  for (const card of cards) {
+    if (card.rank === 'A') {
+      total += 11
+      aces += 1
+    } else {
+      total += ['K', 'Q', 'J'].includes(card.rank) ? 10 : Number(card.rank)
+    }
+  }
+  while (total > 21 && aces > 0) {
+    total -= 10
+    aces -= 1
+  }
+  return total
+}
+
+function isNaturalBlackjack(cards: BlackjackCard[]) {
+  return cards.length === 2 && blackjackTotal(cards) === 21
+}
+
+function blackjackDrawWeights(deck: BlackjackCard[], cards: BlackjackCard[], side: 'player' | 'dealer', rtpBps: number) {
+  if (!Number.isInteger(rtpBps) || rtpBps < 100 || rtpBps > 9900) {
+    throw new CasinoGameError('The round RTP setting is invalid.', 500)
+  }
+  return deck.map((card) => {
+    const busts = blackjackTotal([...cards, card]) > 21
+    const unfavorable = side === 'player' ? busts : !busts
+    return unfavorable ? 10_000 : rtpBps
+  })
+}
+
+function drawBlackjackCard(
+  deck: BlackjackCard[],
+  draw?: {
+    cards: BlackjackCard[]
+    side: 'player' | 'dealer'
+    rtpBps: number
+    serverSeed: string
+    clientSeed: string
+    sessionId: string
+    drawIndex: { value: number }
+  },
+) {
+  if (draw) {
+    const weights = blackjackDrawWeights(deck, draw.cards, draw.side, draw.rtpBps)
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
+    if (totalWeight <= 0) throw new CasinoGameError('The committed Blackjack deck is exhausted.', 500)
+    let ticket = deterministicInteger(
+      draw.serverSeed,
+      `blackjack:${draw.clientSeed}:${draw.sessionId}:weighted-draw:${draw.drawIndex.value}:${draw.side}`,
+      totalWeight,
+    )
+    const index = weights.findIndex((weight) => {
+      ticket -= weight
+      return ticket < 0
+    })
+    const [card] = deck.splice(index, 1)
+    if (!card) throw new CasinoGameError('The committed Blackjack draw is invalid.', 500)
+    draw.drawIndex.value += 1
+    return card
+  }
+
+  const card = deck.shift()
+  if (!card) throw new CasinoGameError('The committed Blackjack deck is exhausted.', 500)
+  return card
+}
+
+function resolveBlackjackDealer(deck: BlackjackCard[], cards: BlackjackCard[], draw?: {
+  rtpBps: number
+  serverSeed: string
+  clientSeed: string
+  sessionId: string
+  drawIndex: { value: number }
+}) {
+  while (blackjackTotal(cards) < 17) {
+    cards.push(draw ? drawBlackjackCard(deck, { ...draw, cards, side: 'dealer' }) : drawBlackjackCard(deck))
+  }
+}
+
 function makeShatterpointArrangement(serverSeed: string, clientSeed: string, sessionId: string, stages: number) {
   return Array.from({ length: stages }, (_, stage) =>
     deterministicInteger(serverSeed, `shatterpoint:${clientSeed}:${sessionId}:${stage}`, 2) === 0 ? 'left' : 'right',
@@ -557,6 +664,32 @@ function roundView(row: Record<string, any>): GameRoundView {
   if (slug === 'crash' && settled) {
     view.crashPoint = Number(outcome.crashPoint)
     if (outcome.cashoutMultiplier !== undefined) view.cashoutMultiplier = Number(outcome.cashoutMultiplier)
+  }
+  if (slug === 'blackjack') {
+    const blackjack = parseOutcome(outcome.blackjack)
+    const playerCards = Array.isArray(blackjack.playerCards) ? blackjack.playerCards as BlackjackCard[] : []
+    const dealerCards = Array.isArray(blackjack.dealerCards) ? blackjack.dealerCards as BlackjackCard[] : []
+    const deck = Array.isArray(blackjack.deck) ? blackjack.deck as BlackjackCard[] : []
+    const hitWeights = !settled && blackjack.oddsModel === 'weighted-draw-v1' && deck.length
+      ? blackjackDrawWeights(deck, playerCards, 'player', Number(outcome.rtpBps))
+      : null
+    const hitBustWeight = hitWeights?.reduce((sum, weight, index) =>
+      blackjackTotal([...playerCards, deck[index]]) > 21 ? sum + weight : sum,
+    0)
+    view.blackjack = {
+      playerCards,
+      dealerCards: settled ? dealerCards : dealerCards.slice(0, 1),
+      playerTotal: blackjackTotal(playerCards),
+      dealerTotal: settled ? blackjackTotal(dealerCards) : null,
+      canDouble: !settled && playerCards.length === 2 && blackjack.doubled !== true,
+      settlement: settled && (blackjack.settlement === 'win' || blackjack.settlement === 'loss' || blackjack.settlement === 'push')
+        ? blackjack.settlement
+        : null,
+      oddsModel: blackjack.oddsModel === 'weighted-draw-v1' ? 'weighted-draw-v1' : 'legacy-payout-scaling',
+      ...(hitWeights && hitBustWeight !== undefined
+        ? { nextHitBustProbabilityBps: Math.round((hitBustWeight / hitWeights.reduce((sum, weight) => sum + weight, 0)) * 10_000) }
+        : {}),
+    }
   }
   if (slug === 'vault-heist') {
     const snapshot = parseOutcome(outcome.vaultHeistSnapshot)
@@ -931,6 +1064,12 @@ export async function startCasinoRound(input: {
     }
     if (input.slug === 'towers') outcome.safeColumns = makeTowerColumns(serverSeed, clientSeed, session.id)
     if (input.slug === 'crash') outcome.crashPoint = makeCrashPoint(serverSeed, clientSeed, session.id, rtpBps)
+    if (input.slug === 'blackjack') {
+      const deck = makeBlackjackDeck(serverSeed, clientSeed, session.id)
+      const playerCards = [drawBlackjackCard(deck), drawBlackjackCard(deck)]
+      const dealerCards = [drawBlackjackCard(deck), drawBlackjackCard(deck)]
+      outcome.blackjack = { deck, playerCards, dealerCards, drawIndex: 4, oddsModel: 'weighted-draw-v1', doubled: false, settlement: null }
+    }
     if (input.slug === 'vault-heist' && vaultHeistProfile) {
       outcome.vaultHeistSnapshot = vaultHeistProfile
       outcome.security = 0
@@ -1018,6 +1157,29 @@ export async function startCasinoRound(input: {
         Number(outcome.payoutAmount) > 0 ? 'win' : 'loss',
       )
     }
+    if (input.slug === 'blackjack') {
+      const blackjack = parseOutcome(outcome.blackjack)
+      const playerNatural = isNaturalBlackjack(blackjack.playerCards as BlackjackCard[])
+      const dealerNatural = isNaturalBlackjack(blackjack.dealerCards as BlackjackCard[])
+      if (playerNatural || dealerNatural) {
+        const settlement = playerNatural && dealerNatural ? 'push' : playerNatural ? 'win' : 'loss'
+        const settledRound = await settleBlackjackRound(
+          client,
+          { bet_id: betId, session_id: session.id, slug: input.slug, wager_amount: wagerAmount },
+          input.userId,
+          outcome,
+          settlement,
+        )
+        return roundView({
+          ...settledRound,
+          session_id: session.id,
+          slug: input.slug,
+          started_at: session.started_at,
+          wager_amount: wagerAmount,
+          server_seed_hash: commitment,
+        })
+      }
+    }
 
     return roundView({
       session_id: session.id,
@@ -1094,6 +1256,147 @@ async function settleRound(
       description: `${row.slug[0].toUpperCase()}${row.slug.slice(1)} payout`,
     })
   }
+}
+
+async function settleBlackjackRound(
+  client: PoolClient,
+  row: Record<string, any>,
+  userId: string,
+  outcome: Record<string, unknown>,
+  settlement: 'win' | 'loss' | 'push',
+) {
+  const blackjack = parseOutcome(outcome.blackjack)
+  blackjack.settlement = settlement
+  const wagerCents = Math.round(Number(row.wager_amount) * 100)
+  let payoutCents = settlement === 'loss'
+    ? 0
+    : settlement === 'push'
+      ? wagerCents
+      : wagerCents + (isNaturalBlackjack(blackjack.playerCards as BlackjackCard[]) && blackjack.doubled !== true
+        ? Math.floor(wagerCents * 1.5)
+        : wagerCents)
+  if (blackjack.oddsModel !== 'weighted-draw-v1' && settlement === 'win') {
+    payoutCents = Math.floor((payoutCents * Number(outcome.rtpBps)) / 10_000)
+  }
+  outcome.blackjack = blackjack
+  const payoutAmount = (payoutCents / 100).toFixed(2)
+  await settleRound(client, row, userId, outcome, payoutAmount, settlement === 'loss' ? 'loss' : 'win')
+  return {
+    ...row,
+    bet_status: 'settled',
+    session_status: 'completed',
+    payout_amount: payoutAmount,
+    outcome,
+  }
+}
+
+async function playBlackjackAction(
+  client: PoolClient,
+  row: Record<string, any>,
+  input: { userId: string; sessionId: string; action: 'hit' | 'stand' | 'double'; requestId?: string },
+) {
+  const outcome = parseOutcome(row.outcome)
+  const actionRequestIds = Array.isArray(outcome.blackjackActionRequestIds)
+    ? outcome.blackjackActionRequestIds.filter((id): id is string => typeof id === 'string')
+    : []
+  if (input.requestId && actionRequestIds.includes(input.requestId)) return roundView(row)
+  if (row.bet_status !== 'pending' || row.session_status !== 'active') {
+    throw new CasinoGameError('This round is already finished.', 409)
+  }
+  if (!input.requestId) throw new CasinoGameError('A request ID is required for Blackjack actions.')
+
+  const blackjack = parseOutcome(outcome.blackjack)
+  const deck = Array.isArray(blackjack.deck) ? blackjack.deck as BlackjackCard[] : []
+  const playerCards = Array.isArray(blackjack.playerCards) ? blackjack.playerCards as BlackjackCard[] : []
+  const dealerCards = Array.isArray(blackjack.dealerCards) ? blackjack.dealerCards as BlackjackCard[] : []
+  if (!deck.length || playerCards.length < 2 || dealerCards.length < 2) {
+    throw new CasinoGameError('The committed Blackjack round is incomplete.', 500)
+  }
+  const rtpBps = Number(outcome.rtpBps)
+  if (!Number.isInteger(rtpBps) || rtpBps < 100 || rtpBps > 9900) {
+    throw new CasinoGameError('The round RTP setting is invalid.', 500)
+  }
+  const drawIndex = { value: Number(blackjack.drawIndex ?? 4) }
+  if (!Number.isInteger(drawIndex.value) || drawIndex.value < 4 || drawIndex.value > 52) {
+    throw new CasinoGameError('The committed Blackjack draw sequence is invalid.', 500)
+  }
+  const drawContext = {
+    rtpBps,
+    serverSeed: String(outcome.serverSeed),
+    clientSeed: String(outcome.clientSeed),
+    sessionId: input.sessionId,
+    drawIndex,
+  }
+  const useWeightedOdds = blackjack.oddsModel === 'weighted-draw-v1'
+
+  if (input.action === 'double') {
+    if (playerCards.length !== 2 || blackjack.doubled === true) {
+      throw new CasinoGameError('Double down is only available on your first two cards.', 409)
+    }
+    const wallet = await getLockedWallet(client, input.userId)
+    const additionalWager = Number(row.wager_amount)
+    if (Number(wallet.balance) < additionalWager) throw new CasinoGameError('Your wallet balance is too low to double down.', 409)
+    await enforceResponsibleGaming(client, input.userId, additionalWager)
+    await insertWalletLedger(client, {
+      userId: input.userId,
+      walletId: wallet.id,
+      amount: (-additionalWager).toFixed(2),
+      type: 'bet',
+      betId: row.bet_id,
+      idempotencyKey: requestLedgerKey(input.userId, input.requestId),
+      description: 'Blackjack double down',
+    })
+    const doubledWager = (additionalWager * 2).toFixed(2)
+    await client.query(`UPDATE public.bets SET wager_amount = $2::numeric WHERE id = $1::uuid`, [row.bet_id, doubledWager])
+    await client.query(
+      `INSERT INTO public.player_progression (user_id, total_xp)
+       VALUES ($1::uuid, $2::bigint)
+       ON CONFLICT (user_id) DO UPDATE SET
+         total_xp = public.player_progression.total_xp + EXCLUDED.total_xp,
+         updated_at = now()`,
+      [input.userId, xpForFizzcoinWager(Number(outcome.wagerCents))],
+    )
+    row.wager_amount = doubledWager
+    blackjack.doubled = true
+    playerCards.push(useWeightedOdds
+      ? drawBlackjackCard(deck, { ...drawContext, cards: playerCards, side: 'player' })
+      : drawBlackjackCard(deck))
+  } else if (input.action === 'hit') {
+    playerCards.push(useWeightedOdds
+      ? drawBlackjackCard(deck, { ...drawContext, cards: playerCards, side: 'player' })
+      : drawBlackjackCard(deck))
+  }
+
+  blackjack.deck = deck
+  blackjack.playerCards = playerCards
+  blackjack.dealerCards = dealerCards
+  blackjack.drawIndex = drawIndex.value
+  outcome.blackjack = blackjack
+  actionRequestIds.push(input.requestId)
+  outcome.blackjackActionRequestIds = actionRequestIds
+
+  const playerTotal = blackjackTotal(playerCards)
+  if (playerTotal > 21) {
+    return roundView(await settleBlackjackRound(client, row, input.userId, outcome, 'loss'))
+  }
+
+  if (input.action === 'stand' || input.action === 'double' || playerTotal === 21) {
+    resolveBlackjackDealer(deck, dealerCards, useWeightedOdds ? drawContext : undefined)
+    blackjack.deck = deck
+    blackjack.dealerCards = dealerCards
+    blackjack.drawIndex = drawIndex.value
+    outcome.blackjack = blackjack
+    const dealerTotal = blackjackTotal(dealerCards)
+    const settlement = dealerTotal > 21 || playerTotal > dealerTotal
+      ? 'win'
+      : playerTotal === dealerTotal
+        ? 'push'
+        : 'loss'
+    return roundView(await settleBlackjackRound(client, row, input.userId, outcome, settlement))
+  }
+
+  await client.query(`UPDATE public.game_results SET outcome = $2::jsonb WHERE bet_id = $1::uuid`, [row.bet_id, JSON.stringify(outcome)])
+  return roundView({ ...row, outcome })
 }
 
 function isDonutBonusChoice(value: string | undefined): value is DonutBonusChoice {
@@ -1231,7 +1534,7 @@ export async function playCasinoAction(input: {
   userId: string
   slug: CasinoGameSlug
   sessionId: string
-  action: 'pick' | 'cashout' | 'sync' | 'bonus' | 'forfeit'
+  action: 'pick' | 'cashout' | 'sync' | 'bonus' | 'forfeit' | 'hit' | 'stand' | 'double'
   position?: number
   choiceId?: string
   requestId?: string
@@ -1400,6 +1703,17 @@ export async function playCasinoAction(input: {
         })
       }
       throw new CasinoGameError('Donut Division only accepts bonus choices and case-file picks.')
+    }
+    if (input.slug === 'blackjack') {
+      if (input.action !== 'hit' && input.action !== 'stand' && input.action !== 'double') {
+        throw new CasinoGameError('Blackjack only accepts hit, stand, and double down.')
+      }
+      return playBlackjackAction(client, row, {
+        userId: input.userId,
+        sessionId: input.sessionId,
+        action: input.action,
+        requestId: input.requestId,
+      })
     }
     if (row.bet_status !== 'pending' || row.session_status !== 'active') throw new CasinoGameError('This round is already finished.', 409)
     if (input.action === 'sync' && input.slug !== 'crash') throw new CasinoGameError('Round sync is only available for Crash.')

@@ -1,6 +1,7 @@
 import type { VaultHeistOutcome } from '@/lib/vault-heist-config'
 
-export type CasinoGameSlug = 'crash' | 'towers' | 'mines' | 'vault-heist' | 'donut-division' | 'fizz-rush' | 'shatterpoint'
+export type CasinoGameSlug = 'crash' | 'towers' | 'mines' | 'blackjack' | 'vault-heist' | 'donut-division' | 'fizz-rush' | 'shatterpoint'
+export type BlackjackCard = { rank: string; suit: string }
 
 export type GameRoundView = {
   sessionId: string
@@ -20,6 +21,16 @@ export type GameRoundView = {
   revealedSafeColumns?: number[]
   crashPoint?: number
   cashoutMultiplier?: number
+  blackjack?: {
+    playerCards: BlackjackCard[]
+    dealerCards: BlackjackCard[]
+    playerTotal: number
+    dealerTotal: number | null
+    canDouble: boolean
+    settlement: 'win' | 'loss' | 'push' | null
+    oddsModel: 'weighted-draw-v1' | 'legacy-payout-scaling'
+    nextHitBustProbabilityBps?: number
+  }
   fairness?: { serverSeed: string; clientSeed: string; commitment: string }
   vaultHeist?: {
     profileId: string

@@ -8,7 +8,7 @@ import { crashMultiplierAtElapsed } from '@/lib/crash-math'
 import { payoutMultiplierForSafePicks } from '@/lib/casino-payout-math'
 import { formatFizzcoins } from '@/lib/format-money'
 
-const gameNames = { crash: 'Crash', towers: 'Towers', mines: 'Mines', 'vault-heist': 'Vault Heist', 'donut-division': 'Donut Division', 'fizz-rush': 'Fizz Rush', shatterpoint: 'FIZZ: Shatterpoint' } as const
+const gameNames = { crash: 'Crash', towers: 'Towers', mines: 'Mines', blackjack: 'Blackjack', 'vault-heist': 'Vault Heist', 'donut-division': 'Donut Division', 'fizz-rush': 'Fizz Rush', shatterpoint: 'FIZZ: Shatterpoint' } as const
 
 type Props = {
   setting: GameRtpSetting
@@ -262,6 +262,7 @@ function gameDescription(slug: GameRtpSetting['slug']) {
   if (slug === 'crash') return 'Watch the multiplier climb, then cash out before the server-generated crash point.'
   if (slug === 'towers') return 'Pick one of three columns per row. One wrong pick ends the round; every safe row grows your payout.'
   if (slug === 'mines') return 'Pick the mine count, reveal safe tiles, and cash out before you uncover a mine.'
+  if (slug === 'blackjack') return 'Get closer to 21 than the dealer without going over.'
   if (slug === 'donut-division') return 'Match symbols from the left across 25 paylines and choose a bonus investigation when scatters land.'
   if (slug === 'fizz-rush') return 'Run as far as you can before the island claims you.'
   if (slug === 'shatterpoint') return 'Cross the glass bridge, choose safe panes, and cash out before the bridge breaks.'

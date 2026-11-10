@@ -43,11 +43,12 @@ type Props = {
   kickIsLive: boolean
 }
 
-const supportedGames = new Set(['crash', 'mines', 'towers', 'vault-heist', 'donut-division', 'fizz-rush', 'slot-arena', 'shatterpoint'])
+const supportedGames = new Set(['crash', 'mines', 'towers', 'blackjack', 'vault-heist', 'donut-division', 'fizz-rush', 'slot-arena', 'shatterpoint'])
 const gameArtwork: Record<string, string> = {
   crash: '/games/fizz-crash-airplane.png',
   mines: '/games/fizz-mines.png',
   towers: '/games/fizz-towers.png',
+  blackjack: '/games/fizzblackjack.png',
   'vault-heist': '/games/vault-heist-bg.png',
   'donut-division': '/games/donut-division-cover.png',
   'fizz-rush': '/games/fizz-rush-cover.png',
@@ -58,6 +59,7 @@ const spotlights: Record<string, { eyebrow: string; title: string; detail: strin
   crash: { eyebrow: 'Fizz originals', title: 'Ride the multiplier', detail: 'Cash out before the round ends.' },
   mines: { eyebrow: 'Fizz originals', title: 'Find the safe tiles', detail: 'Reveal gems and choose when to cash out.' },
   towers: { eyebrow: 'Fizz originals', title: 'Climb one row at a time', detail: 'Pick a safe column and keep climbing.' },
+  blackjack: { eyebrow: 'Fizz originals · table games', title: 'A seat at the table', detail: 'Take on the dealer. Play your hand to 21.' },
   'vault-heist': { eyebrow: 'Fizz original · flagship', title: 'Vault Heist', detail: 'Crack the doors. Beat the alarm. Choose your escape.' },
   'donut-division': { eyebrow: 'Fizz originals · slots', title: 'Donut Division', detail: 'Match symbols across 25 paylines and investigate the bonus.' },
   'fizz-rush': { eyebrow: 'Fizz originals · runner', title: 'Fizz Rush', detail: 'Run as far as you can before the island claims you.' },

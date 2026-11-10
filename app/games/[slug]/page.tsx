@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { CasinoGameBoard } from '@/components/casino-game-board'
+import { BlackjackGame } from '@/components/blackjack-game'
 import { DonutDivisionGame } from '@/components/donut-division-game'
 import { FizzRushGame } from '@/components/fizz-rush-game'
 import { VaultHeistGame } from '@/components/vault-heist-game'
@@ -103,6 +104,23 @@ export default async function GamePage({
     ])
     if (!settings) notFound()
     return <FizzRushGame
+      setting={settings}
+      initialRound={initialRound}
+      initialBalance={wallet.balance}
+      currency={wallet.currency}
+      playerName={username || session.user.name || 'Player'}
+    />
+  }
+
+  if (rawSlug === 'blackjack') {
+    const [settings, initialRound, wallet, username] = await Promise.all([
+      getBuiltInRtpSetting(rawSlug),
+      getActiveCasinoRound(session.user.id, rawSlug),
+      getWalletSnapshot(session.user.id),
+      getPlayerUsername(session.user.id),
+    ])
+    if (!settings) notFound()
+    return <BlackjackGame
       setting={settings}
       initialRound={initialRound}
       initialBalance={wallet.balance}
