@@ -1,9 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Check, CircleHelp, ShieldCheck, TriangleAlert } from 'lucide-react'
-import type { CSSProperties } from 'react'
 import type { BlackjackCard, GameRoundView, GameRtpSetting } from '@/lib/casino-game-types'
 import { formatFizzcoins } from '@/lib/format-money'
 
@@ -17,15 +16,14 @@ type Props = {
 
 const suitSymbols: Record<string, string> = { clubs: '♣', diamonds: '♦', hearts: '♥', spades: '♠' }
 
-function PlayingCard({ card, hidden = false, reveal = false, side, index }: { card?: BlackjackCard; hidden?: boolean; reveal?: boolean; side: 'player' | 'dealer'; index: number }) {
-  const dealDelay = index > 1 ? 0 : (index * 2 + (side === 'dealer' ? 1 : 0)) * 140
-  const dealStyle = { '--blackjack-deal-delay': `${dealDelay}ms` } as CSSProperties
+function PlayingCard({ card, hidden = false, cardKey, side, index }: { card?: BlackjackCard; hidden?: boolean; cardKey: string; side: 'player' | 'dealer'; index: number }) {
+  const dealOrder = index > 1 ? index + (side === 'dealer' ? 3 : 2) : index * 2 + (side === 'dealer' ? 1 : 0)
   if (hidden || !card) {
-    return <div style={dealStyle} aria-label="Face-down card" className="blackjack-card-deal relative flex aspect-[0.7] w-[68px] items-center justify-center overflow-hidden rounded-lg border border-white/20 bg-[repeating-linear-gradient(45deg,#262b39,#262b39_5px,#1c202b_5px,#1c202b_10px)] shadow-lg sm:w-[82px]"><img src="/fizzlogo.png" alt="" className="w-[72%] object-contain opacity-75" /></div>
+    return <div data-card-key={cardKey} data-card-hidden="true" data-deal-order={dealOrder} aria-label="Face-down card" className="blackjack-card relative flex aspect-[0.7] w-[68px] items-center justify-center overflow-hidden rounded-lg border border-white/20 bg-[repeating-linear-gradient(45deg,#262b39,#262b39_5px,#1c202b_5px,#1c202b_10px)] shadow-lg sm:w-[82px]"><img src="/fizzlogo.png" alt="" className="w-[72%] object-contain opacity-75" /></div>
   }
   const red = card.suit === 'hearts' || card.suit === 'diamonds'
   return (
-    <div style={dealStyle} aria-label={`${card.rank} of ${card.suit}`} className={`blackjack-card-deal relative flex aspect-[0.7] w-[68px] flex-col justify-between rounded-lg border border-black/10 bg-[#f7f4ed] p-1.5 shadow-lg sm:w-[82px] sm:p-2 ${reveal ? 'blackjack-card-reveal' : ''} ${red ? 'text-[#c14447]' : 'text-[#20252e]'}`}>
+    <div data-card-key={cardKey} data-card-hidden="false" data-deal-order={dealOrder} aria-label={`${card.rank} of ${card.suit}`} className={`blackjack-card relative flex aspect-[0.7] w-[68px] flex-col justify-between rounded-lg border border-black/10 bg-[#f7f4ed] p-1.5 shadow-lg sm:w-[82px] sm:p-2 ${red ? 'text-[#c14447]' : 'text-[#20252e]'}`}>
       <span className="text-sm font-bold leading-none sm:text-base">{card.rank}<span className="block text-xs">{suitSymbols[card.suit]}</span></span>
       <span aria-hidden="true" className="absolute inset-0 flex items-center justify-center text-3xl opacity-75 sm:text-4xl">{suitSymbols[card.suit]}</span>
       <span aria-hidden="true" className="rotate-180 self-end text-sm font-bold leading-none sm:text-base">{card.rank}<span className="block text-xs">{suitSymbols[card.suit]}</span></span>
@@ -40,8 +38,49 @@ export function BlackjackGame({ setting, initialRound, initialBalance, currency,
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
   const [verified, setVerified] = useState('')
+  const cardStates = useRef(new Map<string, boolean>())
   const hand = round?.blackjack
   const active = round?.status === 'active'
+
+  useLayoutEffect(() => {
+    const cards = Array.from(document.querySelectorAll<HTMLElement>('.blackjack-card[data-card-key]'))
+      .sort((left, right) => Number(left.dataset.dealOrder) - Number(right.dataset.dealOrder))
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    let dealIndex = 0
+
+    for (const card of cards) {
+      const key = card.dataset.cardKey
+      if (!key) continue
+      const isHidden = card.dataset.cardHidden === 'true'
+      const previousState = cardStates.current.get(key)
+      if (previousState === isHidden) continue
+      cardStates.current.set(key, isHidden)
+
+      if (previousState === true && !isHidden) {
+        card.animate(
+          [{ transform: 'perspective(700px) rotateY(180deg)', filter: 'brightness(.7)' }, { transform: 'perspective(700px) rotateY(-12deg)', filter: 'brightness(1.1)', offset: 0.68 }, { transform: 'perspective(700px) rotateY(0)', filter: 'brightness(1)' }],
+          { duration: reduceMotion ? 1 : 480, easing: 'cubic-bezier(.2,.72,.24,1)' },
+        )
+        continue
+      }
+
+      const order = dealIndex++
+      const animation = card.animate(
+        [
+          { opacity: 0, transform: 'perspective(700px) translate3d(190px, 180px, 0) rotateY(155deg) rotateZ(18deg) scale(.68)', filter: 'brightness(1.4) blur(2px)' },
+          { opacity: 1, transform: 'perspective(700px) translate3d(-6px, -7px, 0) rotateY(-14deg) rotateZ(-2deg) scale(1.05)', filter: 'brightness(1.12) blur(0)', offset: 0.68 },
+          { opacity: 1, transform: 'perspective(700px) translate3d(0, 0, 0) rotateY(0) rotateZ(0) scale(1)', filter: 'brightness(1) blur(0)' },
+        ],
+        { duration: reduceMotion ? 1 : 680, delay: reduceMotion ? 0 : order * 135, easing: 'cubic-bezier(.16,.76,.24,1)', fill: 'both' },
+      )
+      animation.onfinish = () => {
+        card.style.opacity = '1'
+        card.style.transform = 'none'
+        card.style.filter = 'none'
+        animation.cancel()
+      }
+    }
+  })
 
   async function sendAction(action: 'start' | 'hit' | 'stand' | 'double') {
     if (pending) return
@@ -111,18 +150,28 @@ export function BlackjackGame({ setting, initialRound, initialBalance, currency,
             <div className="relative flex min-h-[440px] flex-col overflow-hidden rounded-[20px] border border-[#d6b674]/20 bg-[radial-gradient(ellipse_at_50%_42%,#20634d_0%,#124632_48%,#0d3027_100%)] px-4 py-7 shadow-inner sm:min-h-[500px] sm:px-8">
               <div aria-hidden="true" className="pointer-events-none absolute inset-3 rounded-[44%] border border-[#d6b674]/15 sm:inset-5" />
               <img src="/fizzlogo.png" alt="" aria-hidden="true" className="pointer-events-none absolute left-1/2 top-1/2 w-48 -translate-x-1/2 -translate-y-1/2 object-contain opacity-[0.09] sm:w-64" />
+              <div aria-hidden="true" className="pointer-events-none absolute bottom-5 right-4 -rotate-[12deg] scale-75 sm:bottom-7 sm:right-7 sm:scale-100"><div className="absolute -left-2 -top-2 size-[52px] rounded-md border border-white/10 bg-[#252b38] shadow-lg" /><div className="absolute -left-1 -top-1 size-[52px] rounded-md border border-white/15 bg-[#202633] shadow-lg" /><div className="relative flex size-[52px] items-center justify-center rounded-md border border-white/20 bg-[repeating-linear-gradient(45deg,#262b39,#262b39_4px,#1c202b_4px,#1c202b_8px)] shadow-lg"><img src="/fizzlogo.png" alt="" className="w-[72%] opacity-75" /></div></div>
               <div className="relative z-10 flex flex-1 flex-col items-center justify-center gap-3">
                 <div className="text-center">
                   <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/55">Dealer{hand?.dealerTotal !== null && hand?.dealerTotal !== undefined ? ` · ${hand.dealerTotal}` : ''}</p>
                   <div className="mt-3 flex min-h-[100px] items-center justify-center">
-                    {hand ? <div className="flex -space-x-4 sm:-space-x-5">{hand.dealerCards.map((card, index) => <PlayingCard key={`${round!.sessionId}-dealer-${index}`} side="dealer" index={index} card={card} reveal={!active && index === 1} />)}{active && <PlayingCard key={`${round!.sessionId}-dealer-1`} side="dealer" index={1} hidden />}</div> : <p className="text-sm text-white/45">The table is ready when you are.</p>}
+                    {hand ? <div className="flex -space-x-4 sm:-space-x-5">{hand.dealerCards.map((card, index) => {
+                      const cardKey = `${round!.sessionId}-dealer-${index}`
+                      return <PlayingCard key={cardKey} cardKey={cardKey} side="dealer" index={index} card={card} />
+                    })}{active && (() => {
+                      const cardKey = `${round!.sessionId}-dealer-1`
+                      return <PlayingCard key={cardKey} cardKey={cardKey} side="dealer" index={1} hidden />
+                    })()}</div> : <p className="text-sm text-white/45">The table is ready when you are.</p>}
                   </div>
                 </div>
                 <div className="my-2 flex items-center gap-3 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/35"><span className="h-px w-8 bg-white/15" />Dealer stands on 17<span className="h-px w-8 bg-white/15" /></div>
                 <div className="text-center">
                   <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/55">Your hand{hand ? ` · ${hand.playerTotal}` : ''}</p>
                   <div className="mt-3 flex min-h-[100px] items-center justify-center">
-                    {hand ? <div className="flex -space-x-4 sm:-space-x-5">{hand.playerCards.map((card, index) => <PlayingCard key={`${round!.sessionId}-player-${index}`} side="player" index={index} card={card} />)}</div> : <div className="flex h-[100px] items-center text-5xl font-light text-white/15">21</div>}
+                    {hand ? <div className="flex -space-x-4 sm:-space-x-5">{hand.playerCards.map((card, index) => {
+                      const cardKey = `${round!.sessionId}-player-${index}`
+                      return <PlayingCard key={cardKey} cardKey={cardKey} side="player" index={index} card={card} />
+                    })}</div> : <div className="flex h-[100px] items-center text-5xl font-light text-white/15">21</div>}
                   </div>
                   {active && hand?.nextHitBustProbabilityBps !== undefined && <p className="mt-2 text-[10px] font-medium text-white/55">Next hit bust chance <span className="font-bold text-amber-100">{(hand.nextHitBustProbabilityBps / 100).toFixed(2)}%</span></p>}
                 </div>
