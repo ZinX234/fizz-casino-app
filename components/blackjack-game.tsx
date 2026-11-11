@@ -40,11 +40,12 @@ export function BlackjackGame({ setting, initialRound, initialBalance, currency,
   const [verified, setVerified] = useState('')
   const cardStates = useRef(new Map<string, boolean>())
   const deckRef = useRef<HTMLDivElement>(null)
+  const tableRef = useRef<HTMLElement>(null)
   const hand = round?.blackjack
   const active = round?.status === 'active'
 
   useLayoutEffect(() => {
-    const cards = Array.from(document.querySelectorAll<HTMLElement>('.blackjack-card[data-card-key]'))
+    const cards = Array.from(tableRef.current?.querySelectorAll<HTMLElement>('.blackjack-card[data-card-key]') ?? [])
       .sort((left, right) => Number(left.dataset.dealOrder) - Number(right.dataset.dealOrder))
     const deck = deckRef.current
     const deckBounds = deck?.getBoundingClientRect()
@@ -67,30 +68,31 @@ export function BlackjackGame({ setting, initialRound, initialBalance, currency,
         continue
       }
 
-      if (!deckBounds || !card.animate) {
+      const cardBounds = card.getBoundingClientRect()
+      const startX = deckBounds ? deckBounds.left + deckBounds.width / 2 - (cardBounds.left + cardBounds.width / 2) : 190
+      const startY = deckBounds ? deckBounds.top + deckBounds.height / 2 - (cardBounds.top + cardBounds.height / 2) : 180
+      card.style.opacity = '0'
+      const order = dealIndex++
+      const animateFromDeck = () => {
         card.style.opacity = '1'
-        cardStates.current.set(key, isHidden)
-        continue
+        if (reduceMotion || !card.animate) return
+        const animation = card.animate(
+          [
+            { opacity: 1, transform: `translate3d(${startX}px, ${startY}px, 0) rotateZ(9deg) scale(.76)`, filter: 'brightness(1.15)' },
+            { opacity: 1, transform: `translate3d(${startX * 0.48}px, ${startY * 0.48 - 34}px, 0) rotateZ(-4deg) scale(1.04)`, filter: 'brightness(1.08)', offset: 0.68 },
+            { opacity: 1, transform: 'translate3d(0, 0, 0) rotateZ(0) scale(1)', filter: 'brightness(1)' },
+          ],
+          { duration: 760, delay: order * 180, easing: 'cubic-bezier(.18,.72,.24,1)', fill: 'both' },
+        )
+        animation.onfinish = () => {
+          card.style.opacity = '1'
+          card.style.transform = 'none'
+          card.style.filter = 'none'
+          animation.cancel()
+        }
       }
 
-      const cardBounds = card.getBoundingClientRect()
-      const startX = deckBounds.left + deckBounds.width / 2 - (cardBounds.left + cardBounds.width / 2)
-      const startY = deckBounds.top + deckBounds.height / 2 - (cardBounds.top + cardBounds.height / 2)
-      const order = dealIndex++
-      const animation = card.animate(
-        [
-          { opacity: 1, transform: `translate3d(${startX}px, ${startY}px, 0) rotateZ(9deg) scale(.76)`, filter: 'brightness(1.15)' },
-          { opacity: 1, transform: `translate3d(${startX * 0.48}px, ${startY * 0.48 - 34}px, 0) rotateZ(-4deg) scale(1.04)`, filter: 'brightness(1.08)', offset: 0.68 },
-          { opacity: 1, transform: 'translate3d(0, 0, 0) rotateZ(0) scale(1)', filter: 'brightness(1)' },
-        ],
-        { duration: reduceMotion ? 1 : 760, delay: reduceMotion ? 0 : order * 180, easing: 'cubic-bezier(.18,.72,.24,1)', fill: 'both' },
-      )
-      animation.onfinish = () => {
-        card.style.opacity = '1'
-        card.style.transform = 'none'
-        card.style.filter = 'none'
-        animation.cancel()
-      }
+      requestAnimationFrame(animateFromDeck)
     }
   })
 
@@ -158,7 +160,7 @@ export function BlackjackGame({ setting, initialRound, initialBalance, currency,
         </div>
 
         <div className="mt-7 grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <section aria-label="Blackjack table" className="rounded-[24px] border border-white/[0.08] bg-[#12151a] p-3 sm:p-5">
+          <section ref={tableRef} aria-label="Blackjack table" className="rounded-[24px] border border-white/[0.08] bg-[#12151a] p-3 sm:p-5">
             <div className="relative flex min-h-[440px] flex-col overflow-hidden rounded-[20px] border border-[#d6b674]/20 bg-[radial-gradient(ellipse_at_50%_42%,#20634d_0%,#124632_48%,#0d3027_100%)] px-4 py-7 shadow-inner sm:min-h-[500px] sm:px-8">
               <div aria-hidden="true" className="pointer-events-none absolute inset-3 rounded-[44%] border border-[#d6b674]/15 sm:inset-5" />
               <img src="/fizzlogo.png" alt="" aria-hidden="true" className="pointer-events-none absolute left-1/2 top-1/2 w-48 -translate-x-1/2 -translate-y-1/2 object-contain opacity-[0.09] sm:w-64" />
