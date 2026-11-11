@@ -69,13 +69,21 @@ export function BlackjackGame({ setting, initialRound, initialBalance, currency,
       }
 
       const cardBounds = card.getBoundingClientRect()
-      const startX = deckBounds ? deckBounds.left + deckBounds.width / 2 - (cardBounds.left + cardBounds.width / 2) : 190
-      const startY = deckBounds ? deckBounds.top + deckBounds.height / 2 - (cardBounds.top + cardBounds.height / 2) : 180
+      const originBounds = deckBounds ?? {
+        left: cardBounds.left + cardBounds.width / 2 + 190,
+        top: cardBounds.top + cardBounds.height / 2 + 180,
+        width: 0,
+        height: 0,
+      }
+      const startX = originBounds.left + originBounds.width / 2 - (cardBounds.left + cardBounds.width / 2)
+      const startY = originBounds.top + originBounds.height / 2 - (cardBounds.top + cardBounds.height / 2)
       card.style.opacity = '0'
       const order = dealIndex++
       const animateFromDeck = () => {
-        card.style.opacity = '1'
-        if (reduceMotion || !card.animate) return
+        if (reduceMotion || !card.animate) {
+          card.style.opacity = '1'
+          return
+        }
         const animation = card.animate(
           [
             { opacity: 1, transform: `translate3d(${startX}px, ${startY}px, 0) rotateZ(9deg) scale(.76)`, filter: 'brightness(1.15)' },
