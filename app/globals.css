@@ -79,10 +79,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .form-input option { background: #15171c; color: white; }
 
 .blackjack-card {
-  opacity: 0;
-  transform: perspective(700px) translate3d(190px, 180px, 0) rotateY(155deg) rotateZ(18deg) scale(.68);
   transform-origin: 50% 50%;
   backface-visibility: hidden;
+  will-change: transform, opacity;
 }
 
 .mine-tile-image {

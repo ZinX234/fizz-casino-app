@@ -39,12 +39,15 @@ export function BlackjackGame({ setting, initialRound, initialBalance, currency,
   const [error, setError] = useState('')
   const [verified, setVerified] = useState('')
   const cardStates = useRef(new Map<string, boolean>())
+  const deckRef = useRef<HTMLDivElement>(null)
   const hand = round?.blackjack
   const active = round?.status === 'active'
 
   useLayoutEffect(() => {
     const cards = Array.from(document.querySelectorAll<HTMLElement>('.blackjack-card[data-card-key]'))
       .sort((left, right) => Number(left.dataset.dealOrder) - Number(right.dataset.dealOrder))
+    const deck = deckRef.current
+    const deckBounds = deck?.getBoundingClientRect()
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     let dealIndex = 0
 
@@ -64,14 +67,23 @@ export function BlackjackGame({ setting, initialRound, initialBalance, currency,
         continue
       }
 
+      if (!deckBounds || !card.animate) {
+        card.style.opacity = '1'
+        cardStates.current.set(key, isHidden)
+        continue
+      }
+
+      const cardBounds = card.getBoundingClientRect()
+      const startX = deckBounds.left + deckBounds.width / 2 - (cardBounds.left + cardBounds.width / 2)
+      const startY = deckBounds.top + deckBounds.height / 2 - (cardBounds.top + cardBounds.height / 2)
       const order = dealIndex++
       const animation = card.animate(
         [
-          { opacity: 0, transform: 'perspective(700px) translate3d(190px, 180px, 0) rotateY(155deg) rotateZ(18deg) scale(.68)', filter: 'brightness(1.4) blur(2px)' },
-          { opacity: 1, transform: 'perspective(700px) translate3d(-6px, -7px, 0) rotateY(-14deg) rotateZ(-2deg) scale(1.05)', filter: 'brightness(1.12) blur(0)', offset: 0.68 },
-          { opacity: 1, transform: 'perspective(700px) translate3d(0, 0, 0) rotateY(0) rotateZ(0) scale(1)', filter: 'brightness(1) blur(0)' },
+          { opacity: 1, transform: `translate3d(${startX}px, ${startY}px, 0) rotateZ(9deg) scale(.76)`, filter: 'brightness(1.15)' },
+          { opacity: 1, transform: `translate3d(${startX * 0.48}px, ${startY * 0.48 - 34}px, 0) rotateZ(-4deg) scale(1.04)`, filter: 'brightness(1.08)', offset: 0.68 },
+          { opacity: 1, transform: 'translate3d(0, 0, 0) rotateZ(0) scale(1)', filter: 'brightness(1)' },
         ],
-        { duration: reduceMotion ? 1 : 680, delay: reduceMotion ? 0 : order * 135, easing: 'cubic-bezier(.16,.76,.24,1)', fill: 'both' },
+        { duration: reduceMotion ? 1 : 760, delay: reduceMotion ? 0 : order * 180, easing: 'cubic-bezier(.18,.72,.24,1)', fill: 'both' },
       )
       animation.onfinish = () => {
         card.style.opacity = '1'
@@ -150,7 +162,11 @@ export function BlackjackGame({ setting, initialRound, initialBalance, currency,
             <div className="relative flex min-h-[440px] flex-col overflow-hidden rounded-[20px] border border-[#d6b674]/20 bg-[radial-gradient(ellipse_at_50%_42%,#20634d_0%,#124632_48%,#0d3027_100%)] px-4 py-7 shadow-inner sm:min-h-[500px] sm:px-8">
               <div aria-hidden="true" className="pointer-events-none absolute inset-3 rounded-[44%] border border-[#d6b674]/15 sm:inset-5" />
               <img src="/fizzlogo.png" alt="" aria-hidden="true" className="pointer-events-none absolute left-1/2 top-1/2 w-48 -translate-x-1/2 -translate-y-1/2 object-contain opacity-[0.09] sm:w-64" />
-              <div aria-hidden="true" className="pointer-events-none absolute bottom-5 right-4 -rotate-[12deg] scale-75 sm:bottom-7 sm:right-7 sm:scale-100"><div className="absolute -left-2 -top-2 size-[52px] rounded-md border border-white/10 bg-[#252b38] shadow-lg" /><div className="absolute -left-1 -top-1 size-[52px] rounded-md border border-white/15 bg-[#202633] shadow-lg" /><div className="relative flex size-[52px] items-center justify-center rounded-md border border-white/20 bg-[repeating-linear-gradient(45deg,#262b39,#262b39_4px,#1c202b_4px,#1c202b_8px)] shadow-lg"><img src="/fizzlogo.png" alt="" className="w-[72%] opacity-75" /></div></div>
+              <div ref={deckRef} aria-hidden="true" className="pointer-events-none absolute bottom-5 right-4 h-[82px] w-[58px] -rotate-[12deg] sm:bottom-7 sm:right-7">
+                <div className="absolute -left-2 -top-2 h-full w-full rounded-md border border-white/10 bg-[#252b38] shadow-lg" />
+                <div className="absolute -left-1 -top-1 h-full w-full rounded-md border border-white/15 bg-[#202633] shadow-lg" />
+                <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-md border border-white/20 bg-[repeating-linear-gradient(45deg,#262b39,#262b39_4px,#1c202b_4px,#1c202b_8px)] shadow-lg"><img src="/fizzlogo.png" alt="" className="w-[72%] opacity-75" /></div>
+              </div>
               <div className="relative z-10 flex flex-1 flex-col items-center justify-center gap-3">
                 <div className="text-center">
                   <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/55">Dealer{hand?.dealerTotal !== null && hand?.dealerTotal !== undefined ? ` · ${hand.dealerTotal}` : ''}</p>
