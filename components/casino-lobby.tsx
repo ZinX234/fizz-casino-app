@@ -78,13 +78,7 @@ function FizzcoinBalance({ balance, currency }: { balance: string | null; curren
   )
 }
 
-function LobbyRail({ initialIsLive }: { initialIsLive: boolean }) {
-  const { data } = useSWR('/api/kick-status', kickStatusFetcher, {
-    fallbackData: { isLive: initialIsLive },
-    refreshInterval: 15_000,
-    revalidateOnFocus: true,
-  })
-  const isLive = data?.isLive ?? initialIsLive
+function LobbyRail() {
   const links = [
     { href: '/casino', label: 'Casino lobby', icon: Home },
     { href: '/casino#games', label: 'All games', icon: Gamepad2 },
@@ -104,18 +98,6 @@ function LobbyRail({ initialIsLive }: { initialIsLive: boolean }) {
           </Link>
         ))}
       </nav>
-      <a
-        href="https://kick.com/zinx14"
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label={`Kick stream status: ${isLive ? 'live now' : 'offline'}. Visit kick.com/zinx14`}
-        className="mt-4 flex min-h-10 items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.035] px-3 transition hover:border-[#53fc18]/30 hover:bg-[#53fc18]/[0.06]"
-      >
-        <Radio aria-hidden="true" className={`size-4 shrink-0 ${isLive ? 'text-[#8aff65]' : 'text-white/45'}`} />
-        <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${isLive ? 'animate-pulse bg-[#53fc18]' : 'bg-white/30'}`} />
-        <span className="min-w-0 flex-1 truncate text-[10px] font-bold text-white/75">Kick stream</span>
-        <span className={`shrink-0 text-[9px] font-extrabold uppercase tracking-wide ${isLive ? 'text-[#8aff65]' : 'text-white/40'}`}>{isLive ? 'Live' : 'Offline'}</span>
-      </a>
       <div className="mt-auto rounded-2xl border border-white/[0.08] bg-white/[0.035] p-3">
         <p className="text-xs font-bold text-white/80">Need a hand?</p>
         <p className="mt-1 text-[10px] leading-4 text-white/40">Our support team is here to help.</p>
@@ -128,8 +110,14 @@ function LobbyRail({ initialIsLive }: { initialIsLive: boolean }) {
   )
 }
 
-function LobbyHeader({ currentPlayer }: { currentPlayer: LobbyPlayer | null }) {
+function LobbyHeader({ currentPlayer, initialIsLive }: { currentPlayer: LobbyPlayer | null; initialIsLive: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const { data } = useSWR('/api/kick-status', kickStatusFetcher, {
+    fallbackData: { isLive: initialIsLive },
+    refreshInterval: 15_000,
+    revalidateOnFocus: true,
+  })
+  const isLive = data?.isLive ?? initialIsLive
   const links = [
     { href: '/casino', label: 'Casino' },
     { href: '/casino#games', label: 'Games' },
@@ -149,6 +137,17 @@ function LobbyHeader({ currentPlayer }: { currentPlayer: LobbyPlayer | null }) {
             </Link>
           ))}
         </nav>
+        <a
+          href="https://kick.com/zinx14"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Kick stream status: ${isLive ? 'live now' : 'offline'}. Visit kick.com/zinx14`}
+          className={`absolute left-[calc(50%+98px)] top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.12em] transition md:flex ${isLive ? 'animate-pulse border-red-400/45 bg-red-500/15 text-red-100 shadow-[0_0_22px_-5px_rgba(248,60,60,.75)] motion-reduce:animate-none' : 'border-white/10 bg-white/[0.04] text-white/55 hover:border-white/20'}`}
+        >
+          <Radio aria-hidden="true" className={`size-3.5 ${isLive ? 'text-red-300' : 'text-white/45'}`} />
+          <span aria-hidden="true" className={`size-1.5 rounded-full ${isLive ? 'bg-red-400' : 'bg-white/35'}`} />
+          <span>{isLive ? 'Live now' : 'Kick offline'}</span>
+        </a>
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
           {currentPlayer ? (
             <>
@@ -421,8 +420,8 @@ export function CasinoLobby({ games, dataError, currentPlayer, kickIsLive }: Pro
   const [slotArenaError, setSlotArenaError] = useState(false)
   return (
     <div className="min-h-screen bg-[#0b0611] text-white">
-      <LobbyRail initialIsLive={kickIsLive} />
-      <LobbyHeader currentPlayer={currentPlayer} />
+      <LobbyRail />
+      <LobbyHeader currentPlayer={currentPlayer} initialIsLive={kickIsLive} />
       <main
         className="min-h-[calc(100vh-68px)] md:ml-[196px]"
         style={{
