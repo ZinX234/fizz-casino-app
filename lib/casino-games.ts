@@ -19,6 +19,7 @@ const DEFAULT_DONUT_BONUS_BUY_MULTIPLIER = 100
 const MAX_DONUT_BONUS_BUY_MULTIPLIER = 100
 const MAX_SAFE_PICKS = 8
 const CRASH_MAX_MULTIPLIER = 1000
+const FIZZ_RUSH_MAX_PAYOUT_MULTIPLIER = 60
 const MAX_SHATTERPOINT_STAGES = 24
 const MINES_BOARD_SIZE = 25
 const MINES_MIN_COUNT = 1
@@ -664,6 +665,9 @@ function roundView(row: Record<string, any>): GameRoundView {
   if (slug === 'crash' && settled) {
     view.crashPoint = Number(outcome.crashPoint)
     if (outcome.cashoutMultiplier !== undefined) view.cashoutMultiplier = Number(outcome.cashoutMultiplier)
+  }
+  if (slug === 'fizz-rush' && settled && outcome.cashoutMultiplier !== undefined) {
+    view.cashoutMultiplier = Number(outcome.cashoutMultiplier)
   }
   if (slug === 'blackjack') {
     const blackjack = parseOutcome(outcome.blackjack)
@@ -1672,9 +1676,19 @@ export async function playCasinoAction(input: {
     }
     if (input.slug === 'fizz-rush') {
       if (input.action !== 'cashout') throw new CasinoGameError('Fizz Rush only accepts the settle (cashout) action.')
-      if (row.bet_status !== 'pending' || row.session_status !== 'active') throw new CasinoGameError('This round is already finished.', 409)
       const outcome = parseOutcome(row.outcome)
-      const rawMultiplier = typeof input.position === 'number' && Number.isFinite(input.position) ? input.position : 0
+      if (input.requestId && outcome.lastCashoutRequestId === input.requestId
+        && row.bet_status === 'settled' && row.session_status === 'completed') {
+        return roundView(row)
+      }
+      if (row.bet_status !== 'pending' || row.session_status !== 'active') {
+        throw new CasinoGameError('This round is already finished.', 409)
+      }
+      if (typeof input.position !== 'number' || !Number.isFinite(input.position)
+        || input.position < 0 || input.position > FIZZ_RUSH_MAX_PAYOUT_MULTIPLIER) {
+        throw new CasinoGameError('Fizz Rush returned an invalid payout multiplier.')
+      }
+      const rawMultiplier = input.position
       const rtpBps = Number(outcome.rtpBps)
       // RTP is enforced directly: scaledMultiplier = rawMultiplier × (rtpBps / 10_000)
       const scaledMultiplier = Math.max(0, rawMultiplier * (rtpBps / 10_000))
@@ -1682,6 +1696,8 @@ export async function playCasinoAction(input: {
       const payoutAmount = (payoutCents / 100).toFixed(2)
       outcome.rawMultiplier = rawMultiplier
       outcome.scaledMultiplier = scaledMultiplier
+      outcome.cashoutMultiplier = scaledMultiplier
+      if (input.requestId) outcome.lastCashoutRequestId = input.requestId
       await settleRound(client, row, input.userId, outcome, payoutAmount, payoutCents > 0 ? 'win' : 'loss')
       return roundView({
         ...row,

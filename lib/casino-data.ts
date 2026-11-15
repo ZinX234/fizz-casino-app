@@ -118,9 +118,16 @@ export async function getAccountSnapshot(userId: string) {
     ),
     getProgressionSnapshot(userId),
     databasePool.query(
-      `SELECT id::text, amount::text, currency, status, created_at, method
-       FROM public.withdrawals WHERE user_id = $1::uuid
-       ORDER BY created_at DESC LIMIT 10`, [userId],
+      `SELECT w.id::text, w.amount::text, w.currency, w.status, w.created_at, w.method,
+              w.provider_reference,
+              (SELECT al.details->>'proofUrl'
+               FROM public.audit_logs al
+               WHERE al.entity_type = 'withdrawal'
+                 AND al.entity_id = w.id::text
+                 AND al.action = 'withdrawal.marked_paid'
+               ORDER BY al.created_at DESC LIMIT 1) AS payout_proof_url
+       FROM public.withdrawals w WHERE w.user_id = $1::uuid
+       ORDER BY w.created_at DESC LIMIT 10`, [userId],
     ),
   ])
   return { wallet, transactions: transactions.rows, bets: bets.rows, bonuses: bonuses.rows, vip: vip.rows[0] ?? null, limits: limits.rows, progression, withdrawals: withdrawals.rows }

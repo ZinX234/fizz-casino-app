@@ -9,7 +9,22 @@ const reviewSchema = z.object({
   withdrawalId: z.string().uuid(),
   action: z.enum(['approve', 'reject', 'mark_paid']),
   note: z.string().trim().max(500).optional(),
-}).strict()
+  providerReference: z.string().trim().min(1).max(200).optional(),
+  proofUrl: z.string().trim().max(2048).url().refine((value) => {
+    try {
+      return new URL(value).protocol === 'https:'
+    } catch {
+      return false
+    }
+  }, 'Payment proof link must use HTTPS.').optional(),
+}).strict().superRefine((value, context) => {
+  if (value.action === 'mark_paid' && !value.providerReference) {
+    context.addIssue({ code: 'custom', path: ['providerReference'], message: 'Enter the payment transaction ID.' })
+  }
+  if (value.action === 'mark_paid' && !value.proofUrl) {
+    context.addIssue({ code: 'custom', path: ['proofUrl'], message: 'Enter an HTTPS payment-proof image link.' })
+  }
+})
 
 export async function GET(request: Request) {
   if (!isAllowedRequestOrigin(request)) return Response.json({ error: 'Request origin is not allowed.' }, { status: 403 })
@@ -44,8 +59,11 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Invalid review request.' }, { status: 400 })
   }
   const parsed = reviewSchema.safeParse(payload)
-  if (!parsed.success || (parsed.data.action === 'reject' && !parsed.data.note)) {
-    return Response.json({ error: 'Provide a valid action and a rejection note.' }, { status: 400 })
+  if (!parsed.success) {
+    return Response.json({ error: parsed.error.issues[0]?.message ?? 'Provide a valid withdrawal review.' }, { status: 400 })
+  }
+  if (parsed.data.action === 'reject' && !parsed.data.note) {
+    return Response.json({ error: 'Provide a rejection note.' }, { status: 400 })
   }
 
   try {
@@ -75,13 +93,30 @@ export async function POST(request: Request) {
         if (!['approved', 'processing'].includes(withdrawal.status)) {
           throw new WithdrawalReviewError('Only approved withdrawals can be marked paid.', 409)
         }
+        const providerReference = parsed.data.providerReference
+        const proofUrl = parsed.data.proofUrl
+        if (!providerReference || !proofUrl) {
+          throw new WithdrawalReviewError('Enter the transaction ID and HTTPS payment-proof image link.', 400)
+        }
+        const { rows: duplicateReferences } = await client.query(
+          `SELECT id FROM public.withdrawals
+           WHERE provider_reference = $1 AND id <> $2::uuid LIMIT 1`,
+          [providerReference, withdrawal.id],
+        )
+        if (duplicateReferences.length) {
+          throw new WithdrawalReviewError('That payment transaction ID is already recorded.', 409)
+        }
         await client.query(
           `UPDATE public.withdrawals SET status = 'paid', reviewed_by = $2::uuid,
-             review_note = coalesce($3, review_note), completed_at = now(), updated_at = now()
+             provider_reference = $3, review_note = coalesce($4, review_note),
+             completed_at = now(), updated_at = now()
            WHERE id = $1::uuid`,
-          [withdrawal.id, session.user.id, parsed.data.note ?? null],
+          [withdrawal.id, session.user.id, providerReference, parsed.data.note ?? null],
         )
-        await writeAudit(client, session.user.id, withdrawal.id, 'withdrawal.marked_paid', parsed.data.note)
+        await writeAudit(client, session.user.id, withdrawal.id, 'withdrawal.marked_paid', parsed.data.note, {
+          transactionId: providerReference,
+          proofUrl,
+        })
         return { id: withdrawal.id, status: 'paid' }
       }
 
@@ -124,16 +159,28 @@ export async function POST(request: Request) {
     return Response.json({ withdrawal: updated })
   } catch (error) {
     if (error instanceof WithdrawalReviewError) return Response.json({ error: error.message }, { status: error.status })
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {
+      return Response.json({ error: 'That payment transaction ID is already recorded.' }, { status: 409 })
+    }
     console.error('[v0] Withdrawal review failed:', error instanceof Error ? error.message : 'unknown error')
     return Response.json({ error: 'The withdrawal review could not be saved.' }, { status: 500 })
   }
 }
 
-async function writeAudit(client: import('pg').PoolClient, actorId: string, withdrawalId: string, action: string, note?: string) {
+async function writeAudit(
+  client: import('pg').PoolClient,
+  actorId: string,
+  withdrawalId: string,
+  action: string,
+  note?: string,
+  metadata: { transactionId?: string; proofUrl?: string } = {},
+) {
   await client.query(
     `INSERT INTO public.audit_logs (actor_user_id, action, entity_type, entity_id, details)
-     VALUES ($1::uuid, $2, 'withdrawal', $3, jsonb_build_object('note', $4::text))`,
-    [actorId, action, withdrawalId, note ?? null],
+     VALUES ($1::uuid, $2, 'withdrawal', $3, jsonb_build_object(
+       'note', $4::text, 'transactionId', $5::text, 'proofUrl', $6::text
+     ))`,
+    [actorId, action, withdrawalId, note ?? null, metadata.transactionId ?? null, metadata.proofUrl ?? null],
   )
 }
 
