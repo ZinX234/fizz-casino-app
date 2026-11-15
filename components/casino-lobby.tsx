@@ -246,7 +246,7 @@ function SpotlightRow({ games, currentPlayer, onSlotArena }: { games: GameRecord
   if (!spotlitGames.length) return null
 
   return (
-    <section aria-label="Featured Fizz games" className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+    <section aria-label="Featured Fizz games and promotions" className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {spotlitGames.map((game) => {
         const spotlight = spotlights[game.slug] ?? { eyebrow: game.provider, title: game.name, detail: game.description }
         const artwork = game.coverImageUrl || gameArtwork[game.slug]
@@ -272,6 +272,13 @@ function SpotlightRow({ games, currentPlayer, onSlotArena }: { games: GameRecord
         }
         return <Link key={game.id} href={currentPlayer ? `/games/${game.slug}` : `/auth/sign-in?returnTo=/games/${game.slug}`} aria-label={`${currentPlayer ? 'Open' : 'Sign in to play'} ${game.name}`} className={cardClass}>{content}</Link>
       })}
+      <div className="overflow-hidden rounded-2xl border border-fuchsia-200/15 bg-[#1b1020] shadow-[0_16px_50px_-35px_rgba(217,70,239,.55)] lg:col-span-2">
+        <img
+          src="/fizz-header-promo.png"
+          alt="Fizz supports Visa and Mastercard, with KFC and McDonald’s gift cards coming in the future."
+          className="block h-auto w-full"
+        />
+      </div>
     </section>
   )
 }
