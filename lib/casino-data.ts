@@ -16,6 +16,24 @@ export interface GameRecord {
   featured: boolean
 }
 
+export interface CarouselImageRecord {
+  id: string
+  imageUrl: string | null
+  contentType: string
+  altText: string
+  createdAt: string
+}
+
+export async function getCarouselImages(): Promise<CarouselImageRecord[]> {
+  const { rows } = await databasePool.query<CarouselImageRecord>(
+    `SELECT id::text, image_url AS "imageUrl", content_type AS "contentType",
+            alt_text AS "altText", created_at::text AS "createdAt"
+     FROM public.carousel_images
+     ORDER BY created_at ASC, id ASC`,
+  )
+  return rows
+}
+
 export async function getAvailableGames(): Promise<GameRecord[]> {
   await ensureBuiltInGames()
   const { rows } = await databasePool.query<GameRecord>(

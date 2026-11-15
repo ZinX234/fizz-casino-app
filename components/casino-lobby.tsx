@@ -24,7 +24,7 @@ import {
   X,
 } from 'lucide-react'
 import { AffiliateCard } from '@/components/affiliate-card'
-import type { GameRecord } from '@/lib/casino-data'
+import type { CarouselImageRecord, GameRecord } from '@/lib/casino-data'
 import type { PlayerProgression } from '@/lib/progression'
 import { formatFizzcoins } from '@/lib/format-money'
 import { GlobalLobbyChatButton } from '@/components/pinned-lobby-chat'
@@ -40,6 +40,8 @@ type LobbyPlayer = {
 
 type Props = {
   games: GameRecord[]
+  carouselImages: CarouselImageRecord[]
+  carouselImagesError: boolean
   dataError: boolean
   currentPlayer: LobbyPlayer | null
   kickIsLive: boolean
@@ -241,7 +243,7 @@ function ProgressCard({ player }: { player: LobbyPlayer | null }) {
   )
 }
 
-function SpotlightRow({ games, currentPlayer, onSlotArena }: { games: GameRecord[]; currentPlayer: LobbyPlayer | null; onSlotArena: () => void }) {
+function SpotlightRow({ games, carouselImages, carouselImagesError, currentPlayer, onSlotArena }: { games: GameRecord[]; carouselImages: CarouselImageRecord[]; carouselImagesError: boolean; currentPlayer: LobbyPlayer | null; onSlotArena: () => void }) {
   const spotlitGames = games.filter((game) => supportedGames.has(game.slug)).slice(0, 2)
   const spotlightRail = useRef<HTMLDivElement>(null)
 
@@ -269,7 +271,7 @@ function SpotlightRow({ games, currentPlayer, onSlotArena }: { games: GameRecord
           const artwork = game.coverImageUrl || gameArtwork[game.slug]
           const content = (
             <>
-              {artwork ? <img src={artwork} alt="" className="absolute inset-0 -z-20 size-full object-cover transition duration-700 group-hover:scale-[1.045]" /> : <div className="absolute inset-0 -z-20 bg-[radial-gradient(ellipse_at_50%_30%,rgba(217,70,239,.4),rgba(25,11,34,.95)_72%)]" />}
+              {artwork ? <img src={artwork} alt="" className="absolute inset-0 -z-20 size-full bg-[#12051a] object-contain" /> : <div className="absolute inset-0 -z-20 bg-[radial-gradient(ellipse_at_50%_30%,rgba(217,70,239,.4),rgba(25,11,34,.95)_72%)]" />}
               <div className="absolute inset-0 -z-10 bg-gradient-to-r from-[#12051a]/95 via-[#190822]/65 to-transparent" />
               <div className="absolute inset-0 -z-10 bg-[linear-gradient(0deg,rgba(8,4,12,.65),transparent_55%)]" />
               <span className="absolute right-0 top-0 rounded-bl-xl bg-gradient-to-r from-fuchsia-600 to-violet-600 px-4 py-1.5 text-[9px] font-extrabold uppercase tracking-[0.18em] text-white">Fizz originals</span>
@@ -289,14 +291,17 @@ function SpotlightRow({ games, currentPlayer, onSlotArena }: { games: GameRecord
           }
           return <Link key={game.id} href={currentPlayer ? `/games/${game.slug}` : `/auth/sign-in?returnTo=/games/${game.slug}`} aria-label={`${currentPlayer ? 'Open' : 'Sign in to play'} ${game.name}`} className={slideClass}>{content}</Link>
         })}
-        <div className={`${cardClass} min-w-0 basis-full shrink-0 snap-start bg-black lg:basis-[calc(50%_-_8px)]`}>
-          <img
-            src="/fizz-header-promo.png"
-            alt="Fizz supports Visa and Mastercard, with KFC and McDonald’s gift cards coming in the future."
-            className="absolute inset-0 size-full object-cover"
-          />
-        </div>
+        {carouselImages.map((image) => (
+          <div key={image.id} className={`${cardClass} min-w-0 basis-full shrink-0 snap-start bg-[#12051a] lg:basis-[calc(50%_-_8px)]`}>
+            <img
+              src={image.imageUrl ?? `/api/carousel-images/${image.id}`}
+              alt={image.altText}
+              className="absolute inset-0 size-full object-contain"
+            />
+          </div>
+        ))}
       </div>
+      {carouselImagesError && <p role="status" className="mt-2 text-xs text-amber-100/70">Some carousel images could not be loaded.</p>}
     </section>
   )
 }
@@ -453,7 +458,7 @@ function GameShelf({ games, dataError, currentPlayer, onSlotArena }: { games: Ga
   )
 }
 
-export function CasinoLobby({ games, dataError, currentPlayer, kickIsLive }: Props) {
+export function CasinoLobby({ games, carouselImages, carouselImagesError, dataError, currentPlayer, kickIsLive }: Props) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [slotArenaOpen, setSlotArenaOpen] = useState(false)
   const [slotArenaError, setSlotArenaError] = useState(false)
@@ -469,7 +474,7 @@ export function CasinoLobby({ games, dataError, currentPlayer, kickIsLive }: Pro
         }}
       >
         <div className="mx-auto flex max-w-[1600px] flex-col gap-5 px-3 pb-20 pt-5 sm:gap-6 sm:px-5 sm:pt-6">
-          <SpotlightRow games={games} currentPlayer={currentPlayer} onSlotArena={() => setSlotArenaOpen(true)} />
+          <SpotlightRow games={games} carouselImages={carouselImages} carouselImagesError={carouselImagesError} currentPlayer={currentPlayer} onSlotArena={() => setSlotArenaOpen(true)} />
           <GameShelf games={games} dataError={dataError} currentPlayer={currentPlayer} onSlotArena={() => setSlotArenaOpen(true)} />
           <AffiliateCard />
           <section className="flex flex-col gap-3 border-t border-fuchsia-200/[0.1] pt-5 sm:flex-row sm:items-center sm:justify-between">

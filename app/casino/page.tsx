@@ -1,6 +1,6 @@
 import { CasinoLobby } from '@/components/casino-lobby'
 import { auth } from '@/lib/auth/server'
-import { getAvailableGames, getProgressionSnapshot, getWalletSnapshot, type GameRecord } from '@/lib/casino-data'
+import { getAvailableGames, getCarouselImages, getProgressionSnapshot, getWalletSnapshot, type CarouselImageRecord, type GameRecord } from '@/lib/casino-data'
 import { getPlayerUsername } from '@/lib/player-profile'
 import { getKickLiveStatus } from '@/lib/kick-status'
 import type { PlayerProgression } from '@/lib/progression'
@@ -12,13 +12,22 @@ export const metadata = { title: 'Casino lobby | Fizz Casino' }
 export default async function CasinoPage() {
   const { data: session } = await auth.getSession()
   let games: GameRecord[] = []
+  let carouselImages: CarouselImageRecord[] = []
   let dataError = false
+  let carouselImagesError = false
   let kickIsLive = false
   try {
     games = await getAvailableGames()
   } catch (error) {
     dataError = true
     console.error('[v0] Casino catalog unavailable:', error instanceof Error ? error.message : 'unknown error')
+  }
+
+  try {
+    carouselImages = await getCarouselImages()
+  } catch (error) {
+    carouselImagesError = true
+    console.error('[v0] Carousel images unavailable:', error instanceof Error ? error.message : 'unknown error')
   }
 
   try {
@@ -57,5 +66,5 @@ export default async function CasinoPage() {
     }
   }
 
-  return <CasinoLobby games={games} dataError={dataError} currentPlayer={currentPlayer} kickIsLive={kickIsLive} />
+  return <CasinoLobby games={games} carouselImages={carouselImages} carouselImagesError={carouselImagesError} dataError={dataError} currentPlayer={currentPlayer} kickIsLive={kickIsLive} />
 }
