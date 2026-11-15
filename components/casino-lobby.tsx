@@ -78,7 +78,7 @@ function FizzcoinBalance({ balance, currency }: { balance: string | null; curren
   )
 }
 
-function LobbyRail() {
+function LobbyRail({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const links = [
     { href: '/casino', label: 'Casino lobby', icon: Home },
     { href: '/casino#games', label: 'All games', icon: Gamepad2 },
@@ -88,29 +88,42 @@ function LobbyRail() {
   ]
 
   return (
-    <aside aria-label="Casino navigation" className="fixed bottom-0 left-0 top-[68px] z-20 hidden w-[196px] flex-col border-r border-fuchsia-300/[0.09] bg-[#100817]/90 px-3 py-5 backdrop-blur-xl md:flex">
-      <p className="px-3 pb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-white/35">Play</p>
-      <nav className="flex w-full flex-col gap-1">
+    <aside aria-label="Casino navigation" className={`fixed bottom-0 left-0 top-[68px] z-20 hidden flex-col border-r border-fuchsia-300/[0.09] bg-[#100817]/90 py-5 backdrop-blur-xl transition-[width] duration-200 md:flex ${collapsed ? 'w-[72px] px-2' : 'w-[196px] px-3'}`}>
+      <div className={`mb-3 flex items-center ${collapsed ? 'justify-center' : 'justify-between px-1'}`}>
+        <p className={`text-[10px] font-bold uppercase tracking-[0.2em] text-white/35 ${collapsed ? 'sr-only' : ''}`}>Play</p>
+        <button type="button" onClick={onToggle} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} aria-controls="casino-primary-nav" title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} className="flex size-8 shrink-0 items-center justify-center rounded-lg text-white/60 transition hover:bg-white/[0.08] hover:text-white">
+          {collapsed ? <ChevronRight aria-hidden="true" className="size-4" /> : <ChevronLeft aria-hidden="true" className="size-4" />}
+        </button>
+      </div>
+      <nav id="casino-primary-nav" className="flex w-full flex-col gap-1">
         {links.map(({ href, label, icon: Icon }, index) => (
-          <Link key={href} href={href} aria-label={label} className={`flex min-h-11 items-center gap-3 rounded-xl bg-[linear-gradient(145deg,#ed20a6_0%,#a38b63_24%,#4bea00_49%,#98844f_74%,#e52291_100%)] px-3 text-xs font-semibold text-[#181018] transition hover:brightness-110 ${index === 0 ? 'shadow-[inset_0_0_0_1px_rgba(24,16,24,.25)]' : ''}`}>
+          <Link key={href} href={href} aria-label={label} title={collapsed ? label : undefined} className={`flex min-h-11 items-center rounded-xl bg-[linear-gradient(145deg,#ed20a6_0%,#a38b63_24%,#4bea00_49%,#98844f_74%,#e52291_100%)] text-xs font-semibold text-[#181018] transition hover:brightness-110 ${collapsed ? 'justify-center px-0' : 'gap-3 px-3'} ${index === 0 ? 'shadow-[inset_0_0_0_1px_rgba(24,16,24,.25)]' : ''}`}>
             <Icon aria-hidden="true" className="size-[17px]" />
-            {label}
+            <span className={collapsed ? 'sr-only' : ''}>{label}</span>
           </Link>
         ))}
       </nav>
-      <div className="mt-auto rounded-2xl border border-white/[0.08] bg-white/[0.035] p-3">
-        <p className="text-xs font-bold text-white/80">Need a hand?</p>
-        <p className="mt-1 text-[10px] leading-4 text-white/40">Our support team is here to help.</p>
-        <Link href="/support" className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-bold text-fuchsia-200 hover:text-white">
-          <CircleHelp aria-hidden="true" className="size-3.5" /> Live support
-        </Link>
+      <div className={`mt-auto rounded-2xl border border-white/[0.08] bg-white/[0.035] ${collapsed ? 'flex justify-center p-2' : 'p-3'}`}>
+        {collapsed ? (
+          <Link href="/support" aria-label="Live support" title="Live support" className="flex size-8 items-center justify-center text-fuchsia-200 transition hover:text-white">
+            <CircleHelp aria-hidden="true" className="size-3.5" />
+          </Link>
+        ) : (
+          <>
+            <p className="text-xs font-bold text-white/80">Need a hand?</p>
+            <p className="mt-1 text-[10px] leading-4 text-white/40">Our support team is here to help.</p>
+            <Link href="/support" className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-bold text-fuchsia-200 hover:text-white">
+              <CircleHelp aria-hidden="true" className="size-3.5" /> Live support
+            </Link>
+          </>
+        )}
       </div>
-      <p className="mt-4 px-2 text-[9px] leading-4 text-white/30">18+ · Play responsibly</p>
+      <p className={`mt-4 px-2 text-[9px] leading-4 text-white/30 ${collapsed ? 'sr-only' : ''}`}>18+ · Play responsibly</p>
     </aside>
   )
 }
 
-function LobbyHeader({ currentPlayer, initialIsLive }: { currentPlayer: LobbyPlayer | null; initialIsLive: boolean }) {
+function LobbyHeader({ currentPlayer, initialIsLive, sidebarCollapsed }: { currentPlayer: LobbyPlayer | null; initialIsLive: boolean; sidebarCollapsed: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const { data } = useSWR('/api/kick-status', kickStatusFetcher, {
     fallbackData: { isLive: initialIsLive },
@@ -126,7 +139,7 @@ function LobbyHeader({ currentPlayer, initialIsLive }: { currentPlayer: LobbyPla
 
   return (
     <header className="sticky top-0 z-30 border-b border-fuchsia-300/[0.1] bg-[#0b0611]/90 backdrop-blur-xl">
-      <div className="mx-auto flex h-[68px] max-w-[1600px] items-center gap-3 px-3 sm:px-5 md:pl-[216px]">
+      <div className={`mx-auto flex h-[68px] max-w-[1600px] items-center gap-3 px-3 transition-[padding-left] duration-200 sm:px-5 ${sidebarCollapsed ? 'md:pl-[92px]' : 'md:pl-[216px]'}`}>
         <Link href="/casino" className="flex shrink-0 items-center" aria-label="Fizz Casino lobby home">
           <img src="/fizzlogo.png" alt="Fizz Casino" className="h-11 w-28 object-contain drop-shadow-[0_0_18px_rgba(217,70,239,.28)]" />
         </Link>
@@ -416,14 +429,15 @@ function GameShelf({ games, dataError, currentPlayer, onSlotArena }: { games: Ga
 }
 
 export function CasinoLobby({ games, dataError, currentPlayer, kickIsLive }: Props) {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [slotArenaOpen, setSlotArenaOpen] = useState(false)
   const [slotArenaError, setSlotArenaError] = useState(false)
   return (
     <div className="min-h-screen bg-[#0b0611] text-white">
-      <LobbyRail />
-      <LobbyHeader currentPlayer={currentPlayer} initialIsLive={kickIsLive} />
+      <LobbyRail collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((current) => !current)} />
+      <LobbyHeader currentPlayer={currentPlayer} initialIsLive={kickIsLive} sidebarCollapsed={sidebarCollapsed} />
       <main
-        className="min-h-[calc(100vh-68px)] md:ml-[196px]"
+        className={`min-h-[calc(100vh-68px)] transition-[margin-left] duration-200 ${sidebarCollapsed ? 'md:ml-[72px]' : 'md:ml-[196px]'}`}
         style={{
           backgroundImage:
             'radial-gradient(ellipse at 18% 0%, rgba(147, 51, 234, 0.16), transparent 38%), radial-gradient(ellipse at 92% 18%, rgba(219, 39, 119, 0.12), transparent 36%), linear-gradient(180deg, #100817 0%, #0b0611 54%, #09060d 100%)',
