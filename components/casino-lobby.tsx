@@ -88,11 +88,11 @@ function LobbyRail() {
   ]
 
   return (
-    <aside aria-label="Casino navigation" className="casino-rail-gradient fixed bottom-0 left-0 top-[68px] z-20 hidden w-[196px] flex-col border-r border-fuchsia-300/[0.09] bg-[#100817]/90 px-3 py-5 backdrop-blur-xl md:flex">
+    <aside aria-label="Casino navigation" className="fixed bottom-0 left-0 top-[68px] z-20 hidden w-[196px] flex-col border-r border-fuchsia-300/[0.09] bg-[#100817]/90 px-3 py-5 backdrop-blur-xl md:flex">
       <p className="px-3 pb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-white/35">Play</p>
       <nav className="flex w-full flex-col gap-1">
         {links.map(({ href, label, icon: Icon }, index) => (
-          <Link key={href} href={href} aria-label={label} className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-xs font-semibold transition ${index === 0 ? 'bg-fuchsia-500/15 text-fuchsia-100 shadow-[inset_0_0_0_1px_rgba(244,114,182,.18)]' : 'text-white/55 hover:bg-white/[0.06] hover:text-white'}`}>
+          <Link key={href} href={href} aria-label={label} className={`flex min-h-11 items-center gap-3 rounded-xl bg-[linear-gradient(145deg,#ed20a6_0%,#a38b63_24%,#4bea00_49%,#98844f_74%,#e52291_100%)] px-3 text-xs font-semibold text-[#181018] transition hover:brightness-110 ${index === 0 ? 'shadow-[inset_0_0_0_1px_rgba(24,16,24,.25)]' : ''}`}>
             <Icon aria-hidden="true" className="size-[17px]" />
             {label}
           </Link>
@@ -125,7 +125,7 @@ function LobbyHeader({ currentPlayer, initialIsLive }: { currentPlayer: LobbyPla
   ]
 
   return (
-    <header className="casino-rail-gradient sticky top-0 z-30 border-b border-fuchsia-300/[0.1] bg-[#0b0611]/90 backdrop-blur-xl">
+    <header className="sticky top-0 z-30 border-b border-fuchsia-300/[0.1] bg-[#0b0611]/90 backdrop-blur-xl">
       <div className="mx-auto flex h-[68px] max-w-[1600px] items-center gap-3 px-3 sm:px-5 md:pl-[216px]">
         <Link href="/casino" className="flex shrink-0 items-center" aria-label="Fizz Casino lobby home">
           <img src="/fizzlogo.png" alt="Fizz Casino" className="h-11 w-28 object-contain drop-shadow-[0_0_18px_rgba(217,70,239,.28)]" />
