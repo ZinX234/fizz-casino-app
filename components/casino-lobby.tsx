@@ -272,11 +272,11 @@ function SpotlightRow({ games, currentPlayer, onSlotArena }: { games: GameRecord
         }
         return <Link key={game.id} href={currentPlayer ? `/games/${game.slug}` : `/auth/sign-in?returnTo=/games/${game.slug}`} aria-label={`${currentPlayer ? 'Open' : 'Sign in to play'} ${game.name}`} className={cardClass}>{content}</Link>
       })}
-      <div className="overflow-hidden rounded-2xl border border-fuchsia-200/15 bg-[#1b1020] shadow-[0_16px_50px_-35px_rgba(217,70,239,.55)] lg:col-span-2">
+      <div className="relative min-h-[210px] overflow-hidden rounded-2xl border border-fuchsia-200/15 bg-[#1b1020] shadow-[0_16px_50px_-35px_rgba(217,70,239,.55)] sm:min-h-[236px]">
         <img
           src="/fizz-header-promo.png"
           alt="Fizz supports Visa and Mastercard, with KFC and McDonald’s gift cards coming in the future."
-          className="block h-auto w-full"
+          className="absolute inset-0 size-full object-cover"
         />
       </div>
     </section>
