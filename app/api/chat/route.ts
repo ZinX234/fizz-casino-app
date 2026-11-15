@@ -6,6 +6,8 @@ import { CASINO_OWNER_EMAIL } from '@/lib/casino-games'
 
 const messageSchema = z.object({ message: z.string().trim().min(1).max(240) }).strict()
 const MAX_MESSAGES = 60
+const CHAT_CLEAR_INTERVAL_SECONDS = 3 * 60
+const CHAT_WINDOW_START_SQL = `to_timestamp((floor(extract(epoch FROM now()) / ${CHAT_CLEAR_INTERVAL_SECONDS}) * ${CHAT_CLEAR_INTERVAL_SECONDS})::double precision)`
 
 export async function GET() {
   try {
@@ -17,7 +19,16 @@ export async function GET() {
       body: string
       createdAt: Date
     }>(
-       `SELECT m.id::text,
+       `WITH chat_window AS (
+          SELECT ${CHAT_WINDOW_START_SQL} AS starts_at
+        ),
+        expired_messages AS (
+          DELETE FROM public.lobby_chat_messages
+          USING chat_window
+          WHERE lobby_chat_messages.created_at < chat_window.starts_at
+          RETURNING id
+        )
+        SELECT m.id::text,
               coalesce(p.username, 'Player ' || upper(substr(replace(m.sender_user_id::text, '-', ''), 1, 4))) AS "senderName",
               lower(u.email) = lower($2) AS "isOwner",
               m.body,
@@ -25,7 +36,7 @@ export async function GET() {
        FROM public.lobby_chat_messages m
        LEFT JOIN public.user_profiles p ON p.user_id = m.sender_user_id
        JOIN neon_auth."user" u ON u.id = m.sender_user_id
-       WHERE m.created_at > now() - interval '30 days'
+       WHERE m.created_at >= (SELECT starts_at FROM chat_window)
        ORDER BY m.created_at DESC, m.id DESC
        LIMIT $1`,
       [MAX_MESSAGES, CASINO_OWNER_EMAIL],
@@ -71,7 +82,16 @@ export async function POST(request: Request) {
       body: string
       createdAt: Date
     }>(
-      `INSERT INTO public.lobby_chat_messages (sender_user_id, body)
+      `WITH chat_window AS (
+         SELECT ${CHAT_WINDOW_START_SQL} AS starts_at
+       ),
+       expired_messages AS (
+         DELETE FROM public.lobby_chat_messages
+         USING chat_window
+         WHERE lobby_chat_messages.created_at < chat_window.starts_at
+         RETURNING id
+       )
+       INSERT INTO public.lobby_chat_messages (sender_user_id, body)
        VALUES ($1::uuid, $2)
        RETURNING id::text,
                  sender_user_id::text AS "senderId",

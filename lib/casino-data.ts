@@ -16,6 +16,14 @@ export interface GameRecord {
   featured: boolean
 }
 
+export interface AdminGameVisibilityRecord {
+  id: string
+  slug: string
+  name: string
+  status: string
+  lobbyEnabled: boolean
+}
+
 export interface CarouselImageRecord {
   id: string
   imageUrl: string | null
@@ -41,7 +49,19 @@ export async function getAvailableGames(): Promise<GameRecord[]> {
             cover_image_url AS "coverImageUrl", featured
      FROM public.games
      WHERE status = 'available'
+       AND coalesce(configuration->>'lobbyEnabled', 'true') <> 'false'
      ORDER BY featured DESC, name ASC`,
+  )
+  return rows
+}
+
+export async function getAdminGameVisibility(): Promise<AdminGameVisibilityRecord[]> {
+  await ensureBuiltInGames()
+  const { rows } = await databasePool.query<AdminGameVisibilityRecord>(
+    `SELECT id::text, slug, name, status,
+            coalesce(configuration->>'lobbyEnabled', 'true') <> 'false' AS "lobbyEnabled"
+     FROM public.games
+     ORDER BY name ASC`,
   )
   return rows
 }

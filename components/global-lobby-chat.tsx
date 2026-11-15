@@ -41,7 +41,7 @@ function LobbyChat({ signedIn, pinned, onClose, onTogglePin }: { signedIn: boole
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'Your message could not be sent.')
       setDraft('')
-      await mutate((previous = []) => [...previous, payload.message].slice(-60), { revalidate: false })
+      await mutate()
     } catch (issue) {
       setSendError(issue instanceof Error ? issue.message : 'Your message could not be sent.')
     } finally {
@@ -52,7 +52,7 @@ function LobbyChat({ signedIn, pinned, onClose, onTogglePin }: { signedIn: boole
   return (
     <section aria-label="Fizz lobby chat" className="flex h-full min-h-0 flex-col overflow-hidden bg-[#121318]">
       <header className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3.5">
-        <div><h2 className="text-sm font-bold text-white">Lobby chat</h2><p className="mt-1 text-[10px] text-white/40">Messages refresh automatically · be respectful</p></div>
+        <div><h2 className="text-sm font-bold text-white">Lobby chat</h2><p className="mt-1 text-[10px] text-white/40">Chat clears every 3 minutes · be respectful</p></div>
         <div className="flex items-center gap-1">
           <button type="button" onClick={onTogglePin} aria-label={pinned ? 'Unpin lobby chat' : 'Pin lobby chat to side'} aria-pressed={pinned} title={pinned ? 'Unpin chat' : 'Pin chat to side'} className="flex size-8 items-center justify-center rounded-full text-white/55 transition hover:bg-white/[0.06] hover:text-white">{pinned ? <PinOff aria-hidden="true" className="size-4" /> : <Pin aria-hidden="true" className="size-4" />}</button>
           <button type="button" onClick={onClose} aria-label="Close lobby chat" className="flex size-8 items-center justify-center rounded-full text-white/55 transition hover:bg-white/[0.06] hover:text-white"><X aria-hidden="true" className="size-4" /></button>

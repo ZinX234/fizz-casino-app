@@ -116,7 +116,7 @@ function LobbyChatPanel({ open, onClose, pinned, onTogglePin, preferenceError, p
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'Your message could not be sent.')
       setDraft('')
-      await mutate((previous) => previous ? { ...previous, messages: [...previous.messages, payload.message].slice(-60) } : previous, { revalidate: false })
+      await mutate()
     } catch (issue) {
       setSendError(issue instanceof Error ? issue.message : 'Your message could not be sent.')
     } finally {
@@ -127,7 +127,7 @@ function LobbyChatPanel({ open, onClose, pinned, onTogglePin, preferenceError, p
   return (
     <>
       <header className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3.5">
-        <div><h2 className="text-sm font-bold text-white">Lobby chat</h2><p className="mt-1 text-[10px] text-white/40">Messages refresh automatically · be respectful</p></div>
+        <div><h2 className="text-sm font-bold text-white">Lobby chat</h2><p className="mt-1 text-[10px] text-white/40">Chat clears every 3 minutes · be respectful</p></div>
         <div className="flex items-center gap-1">
           <button type="button" onClick={onTogglePin} disabled={pinDisabled} aria-label={pinned ? 'Unpin lobby chat' : 'Pin lobby chat to side'} aria-pressed={pinned} title={pinned ? 'Unpin chat' : 'Pin chat to side'} className="flex size-8 items-center justify-center rounded-full text-white/55 transition hover:bg-white/[0.06] hover:text-white disabled:cursor-wait disabled:opacity-40">{pinned ? <PinOff aria-hidden="true" className="size-4" /> : <Pin aria-hidden="true" className="size-4" />}</button>
           {!pinned && <button type="button" onClick={onClose} aria-label="Close lobby chat" className="flex size-8 items-center justify-center rounded-full text-white/55 transition hover:bg-white/[0.06] hover:text-white"><X aria-hidden="true" className="size-4" /></button>}
