@@ -246,16 +246,32 @@ function ProgressCard({ player }: { player: LobbyPlayer | null }) {
 function SpotlightRow({ games, carouselImages, carouselImagesError, currentPlayer, onSlotArena }: { games: GameRecord[]; carouselImages: CarouselImageRecord[]; carouselImagesError: boolean; currentPlayer: LobbyPlayer | null; onSlotArena: () => void }) {
   const spotlitGames = games.filter((game) => supportedGames.has(game.slug)).slice(0, 2)
   const spotlightRail = useRef<HTMLDivElement>(null)
+  const visibleCarouselImages = carouselImages.length
+    ? carouselImages
+    : carouselImagesError
+      ? [{ id: 'existing-promo-fallback', imageUrl: '/fizz-header-promo.png', contentType: 'image/png', altText: 'Fizz supports Visa and Mastercard, with KFC and McDonald’s gift cards coming in the future.', createdAt: '' }]
+      : []
 
   function scrollSpotlights(direction: -1 | 1) {
     const rail = spotlightRail.current
-    const firstSlide = rail?.firstElementChild
-    if (!rail || !(firstSlide instanceof HTMLElement)) return
+    if (!rail) return
+    const slides = Array.from(rail.children).filter((slide): slide is HTMLElement => slide instanceof HTMLElement)
+    if (slides.length < 2) return
     const gap = Number.parseFloat(window.getComputedStyle(rail).columnGap) || 0
-    rail.scrollBy({ left: direction * (firstSlide.getBoundingClientRect().width + gap), behavior: 'smooth' })
+    const slideStep = slides[0].getBoundingClientRect().width + gap
+    if (slideStep <= 0) return
+    const visibleCount = Math.max(1, Math.round((rail.clientWidth + gap) / slideStep))
+    const maxStartIndex = Math.max(0, slides.length - visibleCount)
+    const currentIndex = Math.min(maxStartIndex, Math.max(0, Math.round(rail.scrollLeft / slideStep)))
+    const nextIndex = direction > 0
+      ? currentIndex === maxStartIndex ? 0 : currentIndex + 1
+      : currentIndex === 0 ? maxStartIndex : currentIndex - 1
+    const railLeft = rail.getBoundingClientRect().left
+    const nextSlideOffset = slides[nextIndex].getBoundingClientRect().left - railLeft
+    rail.scrollTo({ left: rail.scrollLeft + nextSlideOffset, behavior: 'smooth' })
   }
 
-  const cardClass = 'group relative isolate block min-h-[210px] overflow-hidden rounded-2xl border border-fuchsia-200/15 bg-[#1b1020] shadow-[0_16px_50px_-35px_rgba(217,70,239,.55)] transition hover:-translate-y-0.5 hover:border-fuchsia-200/35 sm:min-h-[236px]'
+  const cardClass = 'group relative isolate block aspect-[2/1] min-h-[210px] overflow-hidden rounded-2xl border border-fuchsia-200/15 bg-[#1b1020] shadow-[0_16px_50px_-35px_rgba(217,70,239,.55)] transition hover:-translate-y-0.5 hover:border-fuchsia-200/35 sm:min-h-[236px]'
 
   return (
     <section aria-label="Featured Fizz games and promotions" className="relative">
@@ -275,7 +291,7 @@ function SpotlightRow({ games, carouselImages, carouselImagesError, currentPlaye
               <div className="absolute inset-0 -z-10 bg-gradient-to-r from-[#12051a]/95 via-[#190822]/65 to-transparent" />
               <div className="absolute inset-0 -z-10 bg-[linear-gradient(0deg,rgba(8,4,12,.65),transparent_55%)]" />
               <span className="absolute right-0 top-0 rounded-bl-xl bg-gradient-to-r from-fuchsia-600 to-violet-600 px-4 py-1.5 text-[9px] font-extrabold uppercase tracking-[0.18em] text-white">Fizz originals</span>
-              <div className="flex min-h-[210px] flex-col items-start justify-center px-5 py-7 sm:min-h-[236px] sm:px-8">
+              <div className="flex h-full min-h-[210px] flex-col items-start justify-center px-5 py-7 sm:min-h-[236px] sm:px-8">
                 <span className="text-[10px] font-bold uppercase tracking-[0.17em] text-fuchsia-200/80">{spotlight.eyebrow}</span>
                 <h2 className="mt-2 max-w-[75%] text-2xl font-black uppercase leading-[0.98] tracking-[-0.045em] text-white [text-shadow:0_3px_18px_rgba(0,0,0,.7)] sm:text-3xl">{spotlight.title}</h2>
                 <p className="mt-2 max-w-[68%] text-xs leading-5 text-white/70 sm:text-sm">{spotlight.detail}</p>
@@ -291,7 +307,7 @@ function SpotlightRow({ games, carouselImages, carouselImagesError, currentPlaye
           }
           return <Link key={game.id} href={currentPlayer ? `/games/${game.slug}` : `/auth/sign-in?returnTo=/games/${game.slug}`} aria-label={`${currentPlayer ? 'Open' : 'Sign in to play'} ${game.name}`} className={slideClass}>{content}</Link>
         })}
-        {carouselImages.map((image) => (
+        {visibleCarouselImages.map((image) => (
           <div key={image.id} className={`${cardClass} min-w-0 basis-full shrink-0 snap-start bg-[#12051a] lg:basis-[calc(50%_-_8px)]`}>
             <img
               src={image.imageUrl ?? `/api/carousel-images/${image.id}`}
