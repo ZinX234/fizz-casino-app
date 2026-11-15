@@ -1,4 +1,12 @@
 import { auth } from '@/lib/auth/server'
+import {
+  addCarouselImageSetting,
+  DEFAULT_CAROUSEL_IMAGE_ID,
+  DEFAULT_CAROUSEL_IMAGE_URL,
+  deleteCarouselImageSetting,
+  ensureCarouselImageSettings,
+  isMissingCarouselTable,
+} from '@/lib/carousel-images'
 import { getCasinoAdminAccess } from '@/lib/casino-games'
 import { consumeUserRateLimit, databasePool } from '@/lib/db'
 import { isAllowedRequestOrigin } from '@/lib/request-security'
@@ -56,17 +64,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { rows } = await databasePool.query<{ id: string; createdAt: string }>(
-      `INSERT INTO public.carousel_images (image_data, content_type, alt_text)
-       VALUES ($1, $2, $3)
-       RETURNING id::text, created_at::text AS "createdAt"`,
-      [Buffer.from(bytes), contentType, altText.trim()],
-    )
-    const row = rows[0]
-    if (!row) throw new Error('Carousel image was not returned after insert')
-    return Response.json({
-      image: { id: row.id, imageUrl: null, contentType, altText: altText.trim(), createdAt: row.createdAt },
-    }, { status: 201 })
+    await ensureCarouselImageSettings()
+    const imageRecord = await addCarouselImageSetting({ bytes, contentType, altText: altText.trim() })
+    return Response.json({ image: imageRecord }, { status: 201 })
   } catch (error) {
     console.error('[v0] Carousel image upload failed:', error instanceof Error ? error.message : 'unknown error')
     return Response.json({ error: 'The carousel image could not be saved.' }, { status: 503 })
@@ -91,11 +91,40 @@ export async function DELETE(request: Request) {
   }
 
   try {
-    const { rowCount } = await databasePool.query(
-      'DELETE FROM public.carousel_images WHERE id = $1::uuid',
-      [payload.id],
-    )
-    if (!rowCount) return Response.json({ error: 'Carousel image was not found.' }, { status: 404 })
+    await ensureCarouselImageSettings()
+    let removed = await deleteCarouselImageSetting(payload.id)
+    let legacyImageUrl: string | null = null
+    if (!removed || payload.id === DEFAULT_CAROUSEL_IMAGE_ID) {
+      try {
+        const { rows } = await databasePool.query<{ imageUrl: string | null }>(
+          `DELETE FROM public.carousel_images
+           WHERE id = $1::uuid
+           RETURNING image_url AS "imageUrl"`,
+          [payload.id],
+        )
+        if (rows[0]) {
+          removed = true
+          legacyImageUrl = rows[0].imageUrl
+        }
+      } catch (error) {
+        if (!isMissingCarouselTable(error)) throw error
+      }
+    }
+
+    if (payload.id === DEFAULT_CAROUSEL_IMAGE_ID || legacyImageUrl === DEFAULT_CAROUSEL_IMAGE_URL) {
+      removed = (await deleteCarouselImageSetting(DEFAULT_CAROUSEL_IMAGE_ID)) || removed
+      try {
+        const { rowCount } = await databasePool.query(
+          'DELETE FROM public.carousel_images WHERE image_url = $1',
+          [DEFAULT_CAROUSEL_IMAGE_URL],
+        )
+        removed = (rowCount ?? 0) > 0 || removed
+      } catch (error) {
+        if (!isMissingCarouselTable(error)) throw error
+      }
+    }
+
+    if (!removed) return Response.json({ error: 'Carousel image was not found.' }, { status: 404 })
     return Response.json({ removed: true })
   } catch (error) {
     console.error('[v0] Carousel image removal failed:', error instanceof Error ? error.message : 'unknown error')

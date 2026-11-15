@@ -89,7 +89,7 @@ export function AdminCarouselImages({ initialImages, loadError }: { initialImage
         <button type="submit" disabled={pending || loadError || !file} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-fuchsia-300 px-4 text-xs font-bold text-[#24132a] transition hover:bg-fuchsia-200 disabled:cursor-wait disabled:opacity-60 sm:col-span-2 lg:col-span-1"><ImagePlus aria-hidden="true" className="size-4" />{pending ? 'Adding…' : 'Add image'}</button>
       </form>
       {loadError ? (
-        <p role="alert" className="mt-5 rounded-xl border border-amber-200/15 bg-amber-100/[0.04] px-4 py-4 text-xs leading-5 text-amber-100/75">Carousel image storage is unavailable. Apply the carousel image database migration before managing images.</p>
+        <p role="alert" className="mt-5 rounded-xl border border-amber-200/15 bg-amber-100/[0.04] px-4 py-4 text-xs leading-5 text-amber-100/75">Carousel images could not be loaded. Check the existing database connection and permissions, then try again.</p>
       ) : images.length > 0 ? (
         <ul className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {images.map((image) => (

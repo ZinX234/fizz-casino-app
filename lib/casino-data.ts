@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { ensureBuiltInGames } from '@/lib/casino-games'
+import { ensureCarouselImageSettings, getCarouselImageSettings, isMissingCarouselTable } from '@/lib/carousel-images'
 import { getPlayerProgression } from '@/lib/progression'
 import { databasePool, withTransaction } from '@/lib/db'
 import { decryptPayoutDestination } from '@/lib/payout-details'
@@ -33,13 +34,30 @@ export interface CarouselImageRecord {
 }
 
 export async function getCarouselImages(): Promise<CarouselImageRecord[]> {
-  const { rows } = await databasePool.query<CarouselImageRecord>(
-    `SELECT id::text, image_url AS "imageUrl", content_type AS "contentType",
-            alt_text AS "altText", created_at::text AS "createdAt"
-     FROM public.carousel_images
-     ORDER BY created_at ASC, id ASC`,
-  )
-  return rows
+  await ensureCarouselImageSettings()
+  const settingImages = await getCarouselImageSettings()
+  let migratedImages: CarouselImageRecord[] = []
+  try {
+    const { rows } = await databasePool.query<CarouselImageRecord>(
+      `SELECT id::text, image_url AS "imageUrl", content_type AS "contentType",
+              alt_text AS "altText", created_at::text AS "createdAt"
+       FROM public.carousel_images
+       ORDER BY created_at ASC, id ASC`,
+    )
+    migratedImages = rows
+  } catch (error) {
+    if (!isMissingCarouselTable(error)) throw error
+  }
+
+  const seenImageUrls = new Set<string>()
+  return [...migratedImages, ...settingImages]
+    .filter((image) => {
+      if (!image.imageUrl) return true
+      if (seenImageUrls.has(image.imageUrl)) return false
+      seenImageUrls.add(image.imageUrl)
+      return true
+    })
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
 }
 
 export async function getAvailableGames(): Promise<GameRecord[]> {

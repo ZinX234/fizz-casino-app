@@ -46,13 +46,29 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const [resetMode, setResetMode] = useState(false)
+  const [resetLinkSent, setResetLinkSent] = useState(false)
   const isSignUp = mode === 'sign-up'
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
+    if (resetMode && !isSignUp) setResetLinkSent(false)
     setPending(true)
     try {
+      if (resetMode && !isSignUp) {
+        const result = await authClient.requestPasswordReset({
+          email: email.trim(),
+          redirectTo: `${window.location.origin}/auth/reset-password`,
+        })
+        if (result.error) {
+          setError('We could not send a password reset email. Please try again later.')
+          return
+        }
+        setResetLinkSent(true)
+        return
+      }
+
       const result = isSignUp
         ? await authClient.signUp.email({ email: email.trim(), password, name: username.trim() })
         : await authClient.signIn.email({ email: email.trim(), password })
@@ -89,7 +105,9 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
 
       window.location.replace('/account')
     } catch (authError) {
-      setError(getAuthErrorMessage(authError, isSignUp))
+      setError(resetMode && !isSignUp
+        ? 'We could not send a password reset email. Please try again later.'
+        : getAuthErrorMessage(authError, isSignUp))
     } finally {
       setPending(false)
     }
@@ -107,12 +125,16 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
             <div className="grid grid-cols-2 gap-3"><div className="flex flex-col gap-2"><label htmlFor="paypal-first-name" className="text-xs font-semibold text-white/70">PayPal first name</label><input id="paypal-first-name" name="paypalFirstName" type="text" autoComplete="given-name" value={paypalFirstName} onChange={(event) => setPaypalFirstName(event.target.value)} required maxLength={80} className="form-input" /></div><div className="flex flex-col gap-2"><label htmlFor="paypal-last-name" className="text-xs font-semibold text-white/70">PayPal last name</label><input id="paypal-last-name" name="paypalLastName" type="text" autoComplete="family-name" value={paypalLastName} onChange={(event) => setPaypalLastName(event.target.value)} required maxLength={80} className="form-input" /></div></div>
             <div className="flex flex-col gap-2"><label htmlFor="paypal-email" className="text-xs font-semibold text-white/70">PayPal email</label><input id="paypal-email" name="paypalEmail" type="email" autoComplete="email" value={paypalEmail} onChange={(event) => setPaypalEmail(event.target.value)} required maxLength={254} className="form-input" /></div>
           </>}
-          <div className="flex flex-col gap-2"><label htmlFor="email" className="text-xs font-semibold text-white/70">{isSignUp ? 'Fizz email' : 'Email'}</label><input id="email" name="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required maxLength={254} className="form-input" /></div>
-          <div className="flex flex-col gap-2"><label htmlFor="password" className="text-xs font-semibold text-white/70">Password</label><input id="password" name="password" type="password" autoComplete={isSignUp ? 'new-password' : 'current-password'} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} maxLength={128} className="form-input" /></div>
+          {resetMode && <p className="text-sm leading-6 text-white/45">We’ll email you a secure link to choose a new password. No OTP or 2FA code is needed.</p>}
+          <div className="flex flex-col gap-2"><label htmlFor="email" className="text-xs font-semibold text-white/70">{isSignUp ? 'Fizz email' : 'Email'}</label><input id="email" name="email" type="email" autoComplete="email" value={email} onChange={(event) => { setEmail(event.target.value); setResetLinkSent(false) }} required maxLength={254} className="form-input" /></div>
+          {!resetMode && <div className="flex flex-col gap-2"><label htmlFor="password" className="text-xs font-semibold text-white/70">Password</label><input id="password" name="password" type="password" autoComplete={isSignUp ? 'new-password' : 'current-password'} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} maxLength={128} className="form-input" /></div>}
+          {!isSignUp && !resetMode && <button type="button" onClick={() => { setResetMode(true); setResetLinkSent(false); setError(null) }} className="self-end text-xs font-semibold text-amber-100 hover:underline">Forgot password?</button>}
+          {resetMode && resetLinkSent && <p role="status" className="rounded-xl border border-emerald-300/15 bg-emerald-300/[0.06] px-3 py-2 text-sm text-emerald-100/85">If an account exists for that email, password reset instructions are on the way.</p>}
           {error && <p role="alert" className="rounded-xl border border-rose-300/15 bg-rose-300/[0.06] px-3 py-2 text-sm text-rose-100/85">{error}</p>}
-          <button type="submit" disabled={pending} className="mt-2 inline-flex min-h-12 items-center justify-center rounded-full bg-[#f4bc63] px-5 text-sm font-bold text-[#1a140b] transition hover:bg-[#ffd48d] disabled:cursor-wait disabled:opacity-60">{pending ? 'Please wait…' : isSignUp ? 'Create account' : 'Sign in'}</button>
+          <button type="submit" disabled={pending} className="mt-2 inline-flex min-h-12 items-center justify-center rounded-full bg-[#f4bc63] px-5 text-sm font-bold text-[#1a140b] transition hover:bg-[#ffd48d] disabled:cursor-wait disabled:opacity-60">{pending ? 'Please wait…' : resetMode ? 'Send reset link' : isSignUp ? 'Create account' : 'Sign in'}</button>
+          {resetMode && <button type="button" onClick={() => { setResetMode(false); setResetLinkSent(false); setError(null) }} className="text-sm font-semibold text-white/55 hover:text-white">Back to sign in</button>}
         </form>
-        <p className="mt-6 text-center text-sm text-white/45">{isSignUp ? 'Already have an account?' : 'New to Fizz?'} <Link href={isSignUp ? '/auth/sign-in' : '/auth/sign-up'} className="font-semibold text-amber-100 hover:underline">{isSignUp ? 'Sign in' : 'Create an account'}</Link></p>
+        {!resetMode && <p className="mt-6 text-center text-sm text-white/45">{isSignUp ? 'Already have an account?' : 'New to Fizz?'} <Link href={isSignUp ? '/auth/sign-in' : '/auth/sign-up'} className="font-semibold text-amber-100 hover:underline">{isSignUp ? 'Sign in' : 'Create an account'}</Link></p>}
         <p className="mt-5 text-center text-[11px] leading-5 text-white/30">Only use Fizz where online gaming is legal and you meet the age requirement.</p>
       </section>
     </main>
