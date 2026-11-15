@@ -243,41 +243,59 @@ function ProgressCard({ player }: { player: LobbyPlayer | null }) {
 
 function SpotlightRow({ games, currentPlayer, onSlotArena }: { games: GameRecord[]; currentPlayer: LobbyPlayer | null; onSlotArena: () => void }) {
   const spotlitGames = games.filter((game) => supportedGames.has(game.slug)).slice(0, 2)
-  if (!spotlitGames.length) return null
+  const spotlightRail = useRef<HTMLDivElement>(null)
+
+  function scrollSpotlights(direction: -1 | 1) {
+    const rail = spotlightRail.current
+    const firstSlide = rail?.firstElementChild
+    if (!rail || !(firstSlide instanceof HTMLElement)) return
+    const gap = Number.parseFloat(window.getComputedStyle(rail).columnGap) || 0
+    rail.scrollBy({ left: direction * (firstSlide.getBoundingClientRect().width + gap), behavior: 'smooth' })
+  }
+
+  const cardClass = 'group relative isolate block min-h-[210px] overflow-hidden rounded-2xl border border-fuchsia-200/15 bg-[#1b1020] shadow-[0_16px_50px_-35px_rgba(217,70,239,.55)] transition hover:-translate-y-0.5 hover:border-fuchsia-200/35 sm:min-h-[236px]'
 
   return (
-    <section aria-label="Featured Fizz games and promotions" className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      {spotlitGames.map((game) => {
-        const spotlight = spotlights[game.slug] ?? { eyebrow: game.provider, title: game.name, detail: game.description }
-        const artwork = game.coverImageUrl || gameArtwork[game.slug]
-        const content = (
-          <>
-            {artwork ? <img src={artwork} alt="" className="absolute inset-0 -z-20 size-full object-cover transition duration-700 group-hover:scale-[1.045]" /> : <div className="absolute inset-0 -z-20 bg-[radial-gradient(ellipse_at_50%_30%,rgba(217,70,239,.4),rgba(25,11,34,.95)_72%)]" />}
-            <div className="absolute inset-0 -z-10 bg-gradient-to-r from-[#12051a]/95 via-[#190822]/65 to-transparent" />
-            <div className="absolute inset-0 -z-10 bg-[linear-gradient(0deg,rgba(8,4,12,.65),transparent_55%)]" />
-            <span className="absolute right-0 top-0 rounded-bl-xl bg-gradient-to-r from-fuchsia-600 to-violet-600 px-4 py-1.5 text-[9px] font-extrabold uppercase tracking-[0.18em] text-white">Fizz originals</span>
-            <div className="flex min-h-[210px] flex-col items-start justify-center px-5 py-7 sm:min-h-[236px] sm:px-8">
-              <span className="text-[10px] font-bold uppercase tracking-[0.17em] text-fuchsia-200/80">{spotlight.eyebrow}</span>
-              <h2 className="mt-2 max-w-[75%] text-2xl font-black uppercase leading-[0.98] tracking-[-0.045em] text-white [text-shadow:0_3px_18px_rgba(0,0,0,.7)] sm:text-3xl">{spotlight.title}</h2>
-              <p className="mt-2 max-w-[68%] text-xs leading-5 text-white/70 sm:text-sm">{spotlight.detail}</p>
-              <span className="mt-4 inline-flex min-h-9 items-center gap-2 rounded-lg bg-white px-3.5 text-xs font-extrabold text-[#23102b] transition group-hover:bg-fuchsia-100">
-                Play now <ChevronRight aria-hidden="true" className="size-4" />
-              </span>
-            </div>
-          </>
-        )
-        const cardClass = 'group relative isolate block min-h-[210px] overflow-hidden rounded-2xl border border-fuchsia-200/15 bg-[#1b1020] shadow-[0_16px_50px_-35px_rgba(217,70,239,.55)] transition hover:-translate-y-0.5 hover:border-fuchsia-200/35 sm:min-h-[236px]'
-        if (game.slug === 'slot-arena') {
-          return <button key={game.id} type="button" onClick={onSlotArena} aria-label={`Open ${game.name} game`} className={`${cardClass} w-full text-left`}>{content}</button>
-        }
-        return <Link key={game.id} href={currentPlayer ? `/games/${game.slug}` : `/auth/sign-in?returnTo=/games/${game.slug}`} aria-label={`${currentPlayer ? 'Open' : 'Sign in to play'} ${game.name}`} className={cardClass}>{content}</Link>
-      })}
-      <div className="relative min-h-[210px] overflow-hidden rounded-2xl border border-fuchsia-200/15 bg-[#1b1020] shadow-[0_16px_50px_-35px_rgba(217,70,239,.55)] sm:min-h-[236px]">
-        <img
-          src="/fizz-header-promo.png"
-          alt="Fizz supports Visa and Mastercard, with KFC and McDonald’s gift cards coming in the future."
-          className="absolute inset-0 size-full object-cover"
-        />
+    <section aria-label="Featured Fizz games and promotions" className="relative">
+      <button type="button" onClick={() => scrollSpotlights(-1)} aria-label="Previous featured banner" className="absolute left-2 top-1/2 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-[#12051a]/85 text-white shadow-lg backdrop-blur transition hover:bg-[#28102f]">
+          <ChevronLeft aria-hidden="true" className="size-4" />
+      </button>
+      <button type="button" onClick={() => scrollSpotlights(1)} aria-label="Next featured banner" className="absolute right-2 top-1/2 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-[#12051a]/85 text-white shadow-lg backdrop-blur transition hover:bg-[#28102f]">
+          <ChevronRight aria-hidden="true" className="size-4" />
+      </button>
+      <div ref={spotlightRail} className="flex flex-nowrap snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {spotlitGames.map((game) => {
+          const spotlight = spotlights[game.slug] ?? { eyebrow: game.provider, title: game.name, detail: game.description }
+          const artwork = game.coverImageUrl || gameArtwork[game.slug]
+          const content = (
+            <>
+              {artwork ? <img src={artwork} alt="" className="absolute inset-0 -z-20 size-full object-cover transition duration-700 group-hover:scale-[1.045]" /> : <div className="absolute inset-0 -z-20 bg-[radial-gradient(ellipse_at_50%_30%,rgba(217,70,239,.4),rgba(25,11,34,.95)_72%)]" />}
+              <div className="absolute inset-0 -z-10 bg-gradient-to-r from-[#12051a]/95 via-[#190822]/65 to-transparent" />
+              <div className="absolute inset-0 -z-10 bg-[linear-gradient(0deg,rgba(8,4,12,.65),transparent_55%)]" />
+              <span className="absolute right-0 top-0 rounded-bl-xl bg-gradient-to-r from-fuchsia-600 to-violet-600 px-4 py-1.5 text-[9px] font-extrabold uppercase tracking-[0.18em] text-white">Fizz originals</span>
+              <div className="flex min-h-[210px] flex-col items-start justify-center px-5 py-7 sm:min-h-[236px] sm:px-8">
+                <span className="text-[10px] font-bold uppercase tracking-[0.17em] text-fuchsia-200/80">{spotlight.eyebrow}</span>
+                <h2 className="mt-2 max-w-[75%] text-2xl font-black uppercase leading-[0.98] tracking-[-0.045em] text-white [text-shadow:0_3px_18px_rgba(0,0,0,.7)] sm:text-3xl">{spotlight.title}</h2>
+                <p className="mt-2 max-w-[68%] text-xs leading-5 text-white/70 sm:text-sm">{spotlight.detail}</p>
+                <span className="mt-4 inline-flex min-h-9 items-center gap-2 rounded-lg bg-white px-3.5 text-xs font-extrabold text-[#23102b] transition group-hover:bg-fuchsia-100">
+                  Play now <ChevronRight aria-hidden="true" className="size-4" />
+                </span>
+              </div>
+            </>
+          )
+          const slideClass = `${cardClass} min-w-0 basis-full shrink-0 snap-start lg:basis-[calc(50%_-_8px)]`
+          if (game.slug === 'slot-arena') {
+            return <button key={game.id} type="button" onClick={onSlotArena} aria-label={`Open ${game.name} game`} className={`${slideClass} text-left`}>{content}</button>
+          }
+          return <Link key={game.id} href={currentPlayer ? `/games/${game.slug}` : `/auth/sign-in?returnTo=/games/${game.slug}`} aria-label={`${currentPlayer ? 'Open' : 'Sign in to play'} ${game.name}`} className={slideClass}>{content}</Link>
+        })}
+        <div className={`${cardClass} min-w-0 basis-full shrink-0 snap-start bg-black lg:basis-[calc(50%_-_8px)]`}>
+          <img
+            src="/fizz-header-promo.png"
+            alt="Fizz supports Visa and Mastercard, with KFC and McDonald’s gift cards coming in the future."
+            className="absolute inset-0 size-full object-cover"
+          />
+        </div>
       </div>
     </section>
   )
