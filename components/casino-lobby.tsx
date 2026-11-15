@@ -271,7 +271,7 @@ function SpotlightRow({ games, carouselImages, carouselImagesError, currentPlaye
     rail.scrollTo({ left: rail.scrollLeft + nextSlideOffset, behavior: 'smooth' })
   }
 
-  const cardClass = 'group relative isolate block aspect-[2/1] min-h-[210px] overflow-hidden rounded-2xl border border-fuchsia-200/15 bg-[#1b1020] shadow-[0_16px_50px_-35px_rgba(217,70,239,.55)] transition hover:-translate-y-0.5 hover:border-fuchsia-200/35 sm:min-h-[236px]'
+  const cardClass = 'group relative isolate block min-h-[210px] overflow-hidden rounded-2xl border border-fuchsia-200/15 bg-[#1b1020] shadow-[0_16px_50px_-35px_rgba(217,70,239,.55)] transition hover:-translate-y-0.5 hover:border-fuchsia-200/35 sm:min-h-[236px]'
 
   return (
     <section aria-label="Featured Fizz games and promotions" className="relative">
