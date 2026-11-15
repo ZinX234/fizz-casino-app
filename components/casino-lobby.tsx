@@ -88,7 +88,7 @@ function LobbyRail() {
   ]
 
   return (
-    <aside aria-label="Casino navigation" className="fixed inset-y-[68px] left-0 z-20 hidden w-[196px] flex-col border-r border-fuchsia-300/[0.09] bg-[#100817]/90 px-3 py-5 backdrop-blur-xl md:flex">
+    <aside aria-label="Casino navigation" className="fixed inset-y-[68px] left-0 z-20 hidden w-[196px] flex-col border-r border-fuchsia-300/[0.09] bg-[linear-gradient(145deg,#ed20a6_0%,#a38b63_24%,#4bea00_49%,#98844f_74%,#e52291_100%)] px-3 py-5 backdrop-blur-xl md:flex">
       <p className="px-3 pb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-white/35">Play</p>
       <nav className="flex w-full flex-col gap-1">
         {links.map(({ href, label, icon: Icon }, index) => (
